@@ -1,0 +1,217 @@
+/* ============================================================================
+   A4 + ПЕЧАТЬ сертификата (ШАҲОДАТНОМА).
+
+   Печать рассчитана на УЖЕ ГОТОВЫЙ бумажный бланк: шапка, логотипы, рамка и
+   боковой номер уже напечатаны на бумаге. Приложение печатает ТОЛЬКО чёрный
+   текст, который должен лечь поверх бланка.
+
+   >>> КАЛИБРОВКА КООРДИНАТ <<<
+   Если при физической печати текст немного смещён, подправьте два значения ниже
+   (--cal-x — вправо/влево, --cal-y — вниз/вверх). Значения в миллиметрах,
+   можно отрицательные. Также можно точнее подогнать вертикальный старт блока
+   через --cert-top и левый отступ через --cert-left.
+   ============================================================================ */
+
+:root {
+  /* Глобальная калибровка смещения всего текста (мм). 0 = как на экране. */
+  --cal-x: 0mm;
+  --cal-y: 0mm;
+
+  /* Где начинается печатаемый текст относительно верха/левого края листа A4. */
+  --cert-top: 62mm; /* отступ сверху до строки «Эътибор дорад» */
+  --cert-left: 18mm; /* левое поле текста */
+  --cert-right: 14mm; /* правое поле текста */
+
+  --cert-font: "Times New Roman", "PT Serif", serif;
+  --cert-size: 11.5pt;
+}
+
+/* Лист A4 */
+.a4-page {
+  position: relative;
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+  margin: 0 auto;
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
+}
+
+/* Тонкая направляющая области шапки — только на экране, при печати скрыта.
+   Помогает понять, где заканчивается пре-принт бланка. */
+.a4-header-guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--cert-top);
+  border-bottom: 1px dashed #cbd5e1;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(148, 163, 184, 0.06),
+    rgba(148, 163, 184, 0.06) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 11px;
+  font-family: "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+
+/* Печатаемый слой чёрного текста */
+.cert-content {
+  position: relative;
+  padding: var(--cert-top) var(--cert-right) 10mm var(--cert-left);
+  transform: translate(var(--cal-x), var(--cal-y));
+  font-family: var(--cert-font);
+  font-size: var(--cert-size);
+  line-height: 1.42;
+  color: #000;
+  text-align: justify;
+}
+
+.cert-content p {
+  margin: 0 0 2.0mm 0;
+}
+
+/* Строка «Эътибор дорад / то ...» — правый блок */
+.cert-validity {
+  text-align: right;
+  margin-bottom: 1mm !important;
+}
+.cert-validity-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.cert-validity-row .left {
+  text-align: left;
+}
+
+/* Подпись под редактируемыми полями (номгӯи ...) */
+.cert-caption {
+  font-size: 8.5pt;
+  text-align: center;
+  color: #000;
+  margin-top: -1mm;
+  margin-bottom: 2mm !important;
+}
+
+.cert-center {
+  text-align: center;
+}
+
+.cert-indent {
+  text-indent: 8mm;
+}
+
+/* Блок подписи внизу */
+.cert-sign {
+  margin-top: 4mm;
+}
+.cert-sign-right {
+  text-align: center;
+  margin-bottom: 1mm !important;
+}
+
+/* ===== Редактируемое поле (обёртка над Lexical) ===== */
+.field {
+  display: inline-block;
+  vertical-align: baseline;
+  min-width: 40px;
+  border-bottom: 1px solid #94a3b8; /* подчёркивание — обозначение места ввода */
+  background: rgba(37, 99, 235, 0.06); /* лёгкая подсветка на экране */
+  padding: 0 2px;
+  color: #000;
+}
+.field:focus-within {
+  background: rgba(37, 99, 235, 0.12);
+  border-bottom-color: var(--accent, #2563eb);
+}
+.field-editor {
+  outline: none;
+  min-height: 1em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.field-editor[contenteditable="true"] {
+  caret-color: #2563eb;
+}
+.field-placeholder {
+  position: absolute;
+  color: #94a3b8;
+  pointer-events: none;
+  user-select: none;
+  font-style: italic;
+}
+.field-inline {
+  position: relative;
+}
+.field-center .field-editor {
+  text-align: center;
+}
+.field-block {
+  display: block;
+  width: 100%;
+}
+.field-multiline .field-editor {
+  min-height: 3em;
+}
+
+/* ============================================================================
+   ПЕЧАТЬ
+   ============================================================================ */
+@page {
+  size: A4;
+  margin: 0; /* убираем браузерные поля по максимуму */
+}
+
+@media print {
+  /* Прячем весь интерфейс — печатаем только сертификат */
+  .no-print,
+  .app-nav,
+  .editor-toolbar,
+  .extra-panel,
+  .a4-header-guide {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 210mm;
+    min-height: 297mm;
+  }
+
+  /* Только чёрный текст: убираем подсветку и подчёркивание полей */
+  .field {
+    border-bottom: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+  .field-placeholder {
+    display: none !important;
+  }
+
+  .cert-content {
+    color: #000 !important;
+  }
+
+  /* Точная цветопередача */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
