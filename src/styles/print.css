@@ -195,11 +195,13 @@
     min-height: 297mm;
   }
 
-  /* Только чёрный текст: убираем подсветку и подчёркивание полей */
+  /* Убираем только экранную подсветку; подчёркивание полей ОСТАЁТСЯ и печатается
+     (чёрной линией). Если подчёркивания печатать не нужно — верните здесь
+     border-bottom: none !important; */
   .field {
-    border-bottom: none !important;
+    border-bottom: 1px solid #000 !important;
     background: transparent !important;
-    padding: 0 !important;
+    /* padding как на экране, чтобы ширина линии совпадала с предпросмотром */
   }
   .field-placeholder {
     display: none !important;
