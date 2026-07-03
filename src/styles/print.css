@@ -192,6 +192,19 @@
   min-height: 3em;
 }
 
+/* Редактируемый постоянный текст шаблона (можно исправлять опечатки) */
+.const-text {
+  outline: none;
+  cursor: text;
+  border-radius: 2px;
+}
+.const-text:hover {
+  background: rgba(15, 23, 42, 0.05);
+}
+.const-text:focus {
+  background: rgba(37, 99, 235, 0.1);
+}
+
 /* ============================================================================
    ПЕЧАТЬ
    ============================================================================ */
@@ -235,6 +248,10 @@
   /* Предзаполненные поля печатаются без подчёркивания */
   .field-plain {
     border-bottom: none !important;
+  }
+  /* Постоянный текст печатается без подсветки */
+  .const-text {
+    background: transparent !important;
   }
   .field-placeholder {
     display: none !important;
