@@ -32,6 +32,8 @@ interface EditableFieldProps {
   center?: boolean;
   /** Блочное (на всю ширину) поле вместо inline. */
   block?: boolean;
+  /** Без подчёркивания и подсветки (для предзаполненных полей, напр. № свидетельства). */
+  plain?: boolean;
 }
 
 /** Заполняет пустой редактор начальным текстом ровно один раз. */
@@ -75,6 +77,7 @@ export default function EditableField({
   multiline = false,
   center = false,
   block = false,
+  plain = false,
 }: EditableFieldProps) {
   const initialConfig = {
     namespace: "cert-field",
@@ -93,6 +96,7 @@ export default function EditableField({
     center ? "field-center" : "",
     multiline ? "field-multiline" : "",
     block ? "field-block" : "",
+    plain ? "field-plain" : "",
   ]
     .filter(Boolean)
     .join(" ");

@@ -153,7 +153,14 @@ export default function CertificateEditor() {
   // Хелпер для рендера редактируемого поля бланка
   const f = (
     key: keyof Certificate,
-    opts?: { hint?: string; width?: string; center?: boolean; multiline?: boolean; block?: boolean }
+    opts?: {
+      hint?: string;
+      width?: string;
+      center?: boolean;
+      multiline?: boolean;
+      block?: boolean;
+      plain?: boolean;
+    }
   ) => (
     <EditableField
       key={`${formKey}-${key}`}
@@ -164,6 +171,7 @@ export default function CertificateEditor() {
       center={opts?.center}
       multiline={opts?.multiline}
       block={opts?.block}
+      plain={opts?.plain}
     />
   );
 
@@ -208,7 +216,7 @@ export default function CertificateEditor() {
           </p>
           <div className="cert-validity-row">
             <span className="left">
-              №{f("cert_number", { width: "60mm", hint: "№ свидетельства" })}
+              №{f("cert_number", { width: "60mm", hint: "№ свидетельства", plain: true })}
             </span>
             <span>
               то «{f("to_day", { width: "12mm", center: true, hint: "дд" })}»{" "}

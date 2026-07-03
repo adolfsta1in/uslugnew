@@ -126,8 +126,16 @@
   min-width: 40px;
   border-bottom: 1px solid #94a3b8; /* подчёркивание — обозначение места ввода */
   background: rgba(37, 99, 235, 0.06); /* лёгкая подсветка на экране */
-  padding: 0 2px;
+  padding: 0 2px 0.3mm; /* нижний padding = зазор ~1мм между текстом и линией */
+  line-height: 1; /* прижимаем подчёркивание к тексту (иначе линия уходит вниз) */
   color: #000;
+}
+
+/* Поле без подчёркивания/подсветки — напр. предзаполненный № свидетельства */
+.field-plain {
+  border-bottom: none !important;
+  background: transparent !important;
+  padding-bottom: 0 !important;
 }
 .field:focus-within {
   background: rgba(37, 99, 235, 0.12);
@@ -136,6 +144,7 @@
 .field-editor {
   outline: none;
   min-height: 1em;
+  line-height: 1;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -202,6 +211,10 @@
     border-bottom: 1px solid #000 !important;
     background: transparent !important;
     /* padding как на экране, чтобы ширина линии совпадала с предпросмотром */
+  }
+  /* Предзаполненные поля печатаются без подчёркивания */
+  .field-plain {
+    border-bottom: none !important;
   }
   .field-placeholder {
     display: none !important;
