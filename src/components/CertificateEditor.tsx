@@ -6,7 +6,7 @@ import EditableField from "./EditableField";
 import { toast } from "./Toast";
 import {
   Certificate,
-  DEFAULT_CERT,
+  CERT_NUMBER_DEFAULT,
   emptyCertificate,
   EXTRA_FIELDS,
 } from "../lib/certificate";
@@ -24,7 +24,7 @@ export default function CertificateEditor() {
   const searchParams = useSearchParams();
   const idParam = searchParams.get("id");
 
-  const [cert, setCert] = useState<Certificate>(DEFAULT_CERT);
+  const [cert, setCert] = useState<Certificate>(emptyCertificate());
   const [recordId, setRecordId] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0); // меняется → поля Lexical перемонтируются
   const [saving, setSaving] = useState(false);
@@ -69,6 +69,8 @@ export default function CertificateEditor() {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft = JSON.parse(raw) as Certificate;
+        // № свидетельства всегда должен быть заполнен
+        if (!draft.cert_number) draft.cert_number = CERT_NUMBER_DEFAULT;
         setCert(draft);
         setFormKey((k) => k + 1);
       }

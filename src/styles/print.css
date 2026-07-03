@@ -158,12 +158,25 @@
 .field-editor[contenteditable="true"] {
   caret-color: #2563eb;
 }
+/* Подсказка-название поля отображается ПОВЕРХ самого поля (placeholder) и
+   исчезает, как только пользователь начинает вводить текст. */
 .field-placeholder {
   position: absolute;
+  top: 0;
+  left: 2px;
+  line-height: 1;
   color: #94a3b8;
   pointer-events: none;
   user-select: none;
   font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: calc(100% - 4px);
+}
+.field-center .field-placeholder {
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 .field-inline {
   position: relative;
