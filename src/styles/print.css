@@ -74,7 +74,9 @@
   text-align: justify;
 }
 
-.cert-content p {
+/* Абзац сертификата — используем div, а не p, т.к. внутри есть блочные
+   редакторы Lexical (div недопустим внутри p и ломает гидратацию). */
+.cert-content .cpar {
   margin: 0 0 2.0mm 0;
 }
 
@@ -143,10 +145,15 @@
 }
 .field-editor {
   outline: none;
-  min-height: 1em;
   line-height: 1;
   white-space: pre-wrap;
   word-break: break-word;
+}
+/* Внутренний абзац Lexical — убираем отступы, чтобы линия прилегала к тексту */
+.field-editor p {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
 }
 .field-editor[contenteditable="true"] {
   caret-color: #2563eb;

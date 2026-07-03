@@ -53,11 +53,17 @@ export interface CertField {
 }
 
 /**
+ * Номер свидетельства по умолчанию — предзаполнен в каждом новом бланке.
+ * Меняйте здесь, если серия/номер изменится.
+ */
+export const CERT_NUMBER_DEFAULT = "TJ.762.37100.01.016 – 2025";
+
+/**
  * Печатаемые поля бланка со значениями по умолчанию (образец из Word-документа
  * и фотографии сертификата). Пользователь заполняет только эти места.
  */
 export const DEFAULT_CERT: Certificate = {
-  cert_number: "TJ.762.37100.01.016 – 2025",
+  cert_number: CERT_NUMBER_DEFAULT,
   from_day: "23",
   from_month: "июни",
   from_year: "2026",
@@ -84,7 +90,7 @@ export const DEFAULT_CERT: Certificate = {
 /** Пустая запись — для кнопки «Очистить форму» и новой формы без образца. */
 export function emptyCertificate(): Certificate {
   return {
-    cert_number: "",
+    cert_number: CERT_NUMBER_DEFAULT,
     from_day: "",
     from_month: "",
     from_year: "",

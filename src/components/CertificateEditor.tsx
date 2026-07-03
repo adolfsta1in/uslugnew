@@ -209,11 +209,11 @@ export default function CertificateEditor() {
 
         <div className="cert-content">
           {/* Срок действия */}
-          <p className="cert-validity">
+          <div className="cert-validity">
             Эътибор дорад&nbsp;&nbsp;&nbsp; аз «{f("from_day", { width: "12mm", center: true, hint: "дд" })}»{" "}
             {f("from_month", { width: "22mm", center: true, hint: "месяц" })}{" "}
             {f("from_year", { width: "16mm", center: true, hint: "год" })} с.
-          </p>
+          </div>
           <div className="cert-validity-row">
             <span className="left">
               №{f("cert_number", { width: "60mm", hint: "№ свидетельства", plain: true })}
@@ -226,57 +226,57 @@ export default function CertificateEditor() {
           </div>
 
           {/* Основной текст */}
-          <p style={{ marginTop: "3mm" }}>
+          <div className="cpar" style={{ marginTop: "3mm" }}>
             Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии{" "}
             {f("service_name", { width: "70mm", hint: "наименование" })}
-          </p>
+          </div>
           {f("address", { block: true, center: true, hint: "адрес объекта" })}
           <p className="cert-caption">(номгӯи муассисаи иҷрокунандаи хизматрасонӣ)</p>
 
           {f("manager_name", { block: true, center: true, hint: "ФИО руководителя" })}
           <p className="cert-caption">(ному насаби роҳбари ташкилот)</p>
 
-          <p className="cert-indent">
+          <div className="cert-indent cpar">
             дар асоси Қонунҳои Ҷумҳурии Тоҷикистон «Дар бораи баҳодиҳии мутобиқат», «Дар бораи
             ҳимояи ҳуқуқи истеъмолкунандагон», «Дар бораи бамеъёрдарории техникӣ», «Дар бораи
             стандартонӣ», «Дар бораи таъмини ченаки ягона», «Дар бораи савдо ва хизматрасонии
             маишӣ», «Дар бораи бехатарии маҳсулоти хӯрокворӣ» аз ҷониби Тоҷикстандарт баҳогузорӣ
             карда шуда, субъекти хоҷагидори мазкур имконияти иҷрои хизматрасонии{" "}
             {f("service_type", { width: "55mm", hint: "вид услуги" })}
-          </p>
+          </div>
           <p className="cert-caption">(номгӯи кору хизматрасонӣ)</p>
 
-          <p>
+          <div className="cpar">
             мутобиқи талаботи {f("normative_doc", { width: "55mm", hint: "нормативный документ" })}{" "}
             дорад.
-          </p>
+          </div>
           <p className="cert-caption">(ифодаи номгӯи ҳуҷҷатҳои меъёрии техникӣ)</p>
 
-          <p className="cert-indent">
+          <div className="cert-indent cpar">
             Шаҳодатнома дода шуд дар асоси хулосаи (тасдиқнома) баҳогузорӣ оид ба тасдиқи мутобиқати
             хизматрасонии субъекти хоҷагидор ба талаботи ҳуҷҷати меъёрии техникӣ аз{" "}
             {f("basis_date_number", { width: "50mm", hint: "дата и № основания" })}. Ҳангоми
             шаҳодатномадиҳӣ ҳуҷҷати муайянкунандаи ҳуқуқи фаъолияти субъекти хоҷагидор{" "}
             {f("activity_doc", { width: "55mm", hint: "документ" })} ба инобат гирифта шуд.
-          </p>
+          </div>
 
-          <p className="cert-indent">
+          <p className="cert-indent cpar">
             Дархосткунанда, (иҷрокунандаи кор ва хизматрасонӣ) барои мутобиқати кору ё хизматрасонии
             ба талаботи муқаррарнамудаи ҳуҷҷати меъёрии техникие, ки дар шаҳодатнома дарҷ гардидааст
             ва огоҳ намудани истеъмолкунанда дар бобати доштани шаҳодатнома масъул мебошад.
           </p>
 
-          <p>
+          <div className="cpar">
             Назорати инспексионӣ аз ҷониби{" "}
             {f("inspection_body", { width: "45mm", hint: "орган" })} амалӣ карда мешавад.
-          </p>
+          </div>
           <p className="cert-caption">(номгӯи мақомот оид ба шаҳодатномадиҳӣ)</p>
 
-          <p>
+          <div className="cpar">
             Қайдҳои махсус {f("special_notes", { width: "90mm", hint: "особые отметки" })}
-          </p>
+          </div>
 
-          <p className="cert-indent" style={{ marginTop: "1mm" }}>
+          <p className="cert-indent cpar" style={{ marginTop: "1mm" }}>
             Дар ҳолати иҷро накардани талаботи муқарраргардида шаҳодатномаи мазкур аз эътибор соқит
             дониста мешавад.
           </p>
