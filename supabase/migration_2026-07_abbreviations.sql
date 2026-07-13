@@ -13,10 +13,11 @@ begin
 end;
 $$ language plpgsql;
 
+-- Внимание: `full` — зарезервированное слово SQL, поэтому колонка называется full_text.
 create table if not exists public.abbreviations (
   id uuid primary key default gen_random_uuid(),
-  short text not null,
-  full  text not null,
+  short     text not null,
+  full_text text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

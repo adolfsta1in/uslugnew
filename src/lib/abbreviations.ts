@@ -14,6 +14,20 @@ export interface Abbreviation {
   updated_at?: string;
 }
 
+// Строка таблицы Supabase. В БД колонка называется `full_text`, т.к. `full` —
+// зарезервированное слово SQL. В приложении используем удобное имя `full`.
+interface Row {
+  id: string;
+  short: string;
+  full_text: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function fromRow(r: Row): Abbreviation {
+  return { id: r.id, short: r.short, full: r.full_text, created_at: r.created_at, updated_at: r.updated_at };
+}
+
 const TABLE = "abbreviations";
 const CACHE_KEY = "cert-abbr-cache-v1";
 
@@ -43,7 +57,7 @@ export async function listAbbreviations(): Promise<Abbreviation[]> {
     .select("*")
     .order("short", { ascending: true });
   if (error) throw error;
-  const list = (data ?? []) as Abbreviation[];
+  const list = ((data ?? []) as Row[]).map(fromRow);
   setCache(list);
   return list;
 }
@@ -52,23 +66,23 @@ export async function listAbbreviations(): Promise<Abbreviation[]> {
 export async function insertAbbreviation(a: Abbreviation): Promise<Abbreviation> {
   const { data, error } = await getSupabase()
     .from(TABLE)
-    .insert({ short: a.short, full: a.full })
+    .insert({ short: a.short, full_text: a.full })
     .select()
     .single();
   if (error) throw error;
-  return data as Abbreviation;
+  return fromRow(data as Row);
 }
 
 /** Изменить сокращение. */
 export async function updateAbbreviation(id: string, patch: Abbreviation): Promise<Abbreviation> {
   const { data, error } = await getSupabase()
     .from(TABLE)
-    .update({ short: patch.short, full: patch.full })
+    .update({ short: patch.short, full_text: patch.full })
     .eq("id", id)
     .select()
     .single();
   if (error) throw error;
-  return data as Abbreviation;
+  return fromRow(data as Row);
 }
 
 /** Удалить сокращение. */
