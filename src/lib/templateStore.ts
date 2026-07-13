@@ -27,6 +27,12 @@ export function getTemplateText(id: string, fallback: string): string {
   return Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id] : fallback;
 }
 
+/** Есть ли сохранённая правка фрагмента (тогда в нём может быть форматирование/HTML). */
+export function hasTemplateText(id: string): boolean {
+  ensureLoaded();
+  return Object.prototype.hasOwnProperty.call(overrides, id);
+}
+
 /** Сохранить правку фрагмента шаблона. */
 export function setTemplateText(id: string, text: string) {
   ensureLoaded();
