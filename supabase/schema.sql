@@ -71,3 +71,33 @@ create policy "certificates_select" on public.certificates for select using (tru
 create policy "certificates_insert" on public.certificates for insert with check (true);
 create policy "certificates_update" on public.certificates for update using (true) with check (true);
 create policy "certificates_delete" on public.certificates for delete using (true);
+
+-- ============================================================================
+-- Справочник автозамен (сокращений).
+-- Пользователь задаёт короткую форму `short`, которая при вводе в поля бланка
+-- автоматически разворачивается в полную `full`.
+-- ============================================================================
+create table if not exists public.abbreviations (
+  id uuid primary key default gen_random_uuid(),
+  short text not null,
+  full  text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_abbreviations_updated_at on public.abbreviations;
+create trigger trg_abbreviations_updated_at
+  before update on public.abbreviations
+  for each row execute function public.set_updated_at();
+
+alter table public.abbreviations enable row level security;
+
+drop policy if exists "abbreviations_select" on public.abbreviations;
+drop policy if exists "abbreviations_insert" on public.abbreviations;
+drop policy if exists "abbreviations_update" on public.abbreviations;
+drop policy if exists "abbreviations_delete" on public.abbreviations;
+
+create policy "abbreviations_select" on public.abbreviations for select using (true);
+create policy "abbreviations_insert" on public.abbreviations for insert with check (true);
+create policy "abbreviations_update" on public.abbreviations for update using (true) with check (true);
+create policy "abbreviations_delete" on public.abbreviations for delete using (true);

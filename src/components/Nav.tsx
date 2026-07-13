@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/new", label: "Новый сертификат" },
   { href: "/registry", label: "Реестр" },
+  { href: "/settings", label: "Настройки" },
 ];
 
 export default function Nav() {

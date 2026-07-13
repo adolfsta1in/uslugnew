@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -10,6 +10,10 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
+  $getSelection,
+  $isRangeSelection,
+  $isTextNode,
+  $getNodeByKey,
   $createParagraphNode,
   $createTextNode,
   KEY_ENTER_COMMAND,
@@ -19,6 +23,12 @@ import {
   type EditorState,
 } from "lexical";
 import { setActiveEditor } from "../lib/activeEditor";
+
+/** Пара автозамены: короткая форма → полная. */
+export interface AbbrPair {
+  short: string;
+  full: string;
+}
 
 interface EditableFieldProps {
   /** Начальное значение (устанавливается один раз при монтировании). */
@@ -37,6 +47,8 @@ interface EditableFieldProps {
   block?: boolean;
   /** Без подчёркивания и подсветки (для предзаполненных полей, напр. № свидетельства). */
   plain?: boolean;
+  /** Список автозамен (сокращений), применяемых при вводе. */
+  abbr?: AbbrPair[];
 }
 
 /** Заполняет пустой редактор начальным текстом ровно один раз. */
@@ -84,6 +96,57 @@ function ActiveEditorPlugin() {
 }
 
 /**
+ * Автозамена сокращений: при нажатии пробела слово перед курсором заменяется
+ * на полную форму, если оно совпадает с одним из заданных сокращений.
+ */
+function AutocorrectPlugin({ pairs }: { pairs: AbbrPair[] }) {
+  const [editor] = useLexicalComposerContext();
+  const mapRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const m = new Map<string, string>();
+    for (const p of pairs) if (p.short) m.set(p.short, p.full);
+    mapRef.current = m;
+  }, [pairs]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || mapRef.current.size === 0) return;
+      const info = editor.getEditorState().read(() => {
+        const sel = $getSelection();
+        if (!$isRangeSelection(sel) || !sel.isCollapsed()) return null;
+        const node = sel.anchor.getNode();
+        if (!$isTextNode(node)) return null;
+        const offset = sel.anchor.offset;
+        const before = node.getTextContent().slice(0, offset);
+        const match = before.match(/(\S+)$/);
+        if (!match) return null;
+        const full = mapRef.current.get(match[1]);
+        if (full == null) return null;
+        return { key: node.getKey(), start: offset - match[1].length, end: offset, full };
+      });
+      if (!info) return;
+      e.preventDefault(); // сами вставим полную форму + пробел
+      editor.update(() => {
+        const node = $getNodeByKey(info.key);
+        if (!$isTextNode(node)) return;
+        const t = node.getTextContent();
+        node.setTextContent(t.slice(0, info.start) + info.full + " " + t.slice(info.end));
+        const caret = info.start + info.full.length + 1;
+        node.select(caret, caret);
+      });
+    };
+
+    return editor.registerRootListener((root, prevRoot) => {
+      if (prevRoot) prevRoot.removeEventListener("keydown", onKeyDown);
+      if (root) root.addEventListener("keydown", onKeyDown);
+    });
+  }, [editor]);
+
+  return null;
+}
+
+/**
  * Одно редактируемое поле сертификата на базе Lexical (rich text editor).
  * Каждое поле — изолированный экземпляр редактора, поэтому постоянный текст
  * бланка остаётся нередактируемым, а пользователь заполняет только эти места.
@@ -97,6 +160,7 @@ export default function EditableField({
   center = false,
   block = false,
   plain = false,
+  abbr,
 }: EditableFieldProps) {
   const initialConfig = {
     namespace: "cert-field",
@@ -130,6 +194,7 @@ export default function EditableField({
         />
         <HistoryPlugin />
         <ActiveEditorPlugin />
+        {abbr && abbr.length > 0 && <AutocorrectPlugin pairs={abbr} />}
         {!multiline && <SingleLinePlugin />}
         <OnChangePlugin
           ignoreSelectionChange

@@ -20,6 +20,8 @@ import {
   updateCertificate,
 } from "../lib/certificateStore";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
+import { AbbrPair } from "./EditableField";
+import { getCachedAbbreviations, listAbbreviations } from "../lib/abbreviations";
 
 const DRAFT_KEY = "cert-draft-v1";
 const MARGINS_KEY = "cert-margins-v1";
@@ -40,6 +42,7 @@ export default function CertificateEditor() {
   const [margins, setMargins] = useState<Margins>(DEFAULT_MARGINS);
   const [showRulers, setShowRulers] = useState(true);
   const [hydrated, setHydrated] = useState(false);
+  const [abbr, setAbbr] = useState<AbbrPair[]>([]);
   const didInit = useRef(false);
 
   // Поле-хелпер: значение берётся один раз при монтировании (Lexical неуправляем),
@@ -113,6 +116,16 @@ export default function CertificateEditor() {
       /* ignore */
     }
     setHydrated(true);
+  }, []);
+
+  // Автозамены: сразу из кэша, затем обновляем из Supabase.
+  useEffect(() => {
+    setAbbr(getCachedAbbreviations());
+    listAbbreviations()
+      .then((list) => setAbbr(list.map((a) => ({ short: a.short, full: a.full }))))
+      .catch(() => {
+        /* нет сети/Supabase — используем кэш */
+      });
   }, []);
 
   // Сохранение отступов полей бланка (сохраняются между сеансами).
@@ -228,6 +241,7 @@ export default function CertificateEditor() {
       multiline={opts?.multiline}
       block={opts?.block}
       plain={opts?.plain}
+      abbr={abbr}
     />
   );
 
