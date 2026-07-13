@@ -24,6 +24,7 @@ const WRITABLE_KEYS: (keyof Certificate)[] = [
   "inspection_body",
   "special_notes",
   "signatory",
+  "signature",
   "application_number",
   "plan_number",
   "inspector",

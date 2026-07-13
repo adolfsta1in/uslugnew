@@ -27,6 +27,7 @@ export interface Certificate {
   inspection_body: string; // Орган инспекционного надзора (Тоҷикстандарт)
   special_notes: string; // Қайдҳои махсус (особые отметки)
   signatory: string; // Роҳбари мақомот — ФИО подписанта (Раҳмон И.Х.)
+  signature: string; // Подпись/имя в левой части блока подписи (бывшая линия «___»)
 
   // --- Дополнительные данные (в реестр, НЕ печатаются на бланке) ---
   application_number: string; // № заявка
@@ -80,6 +81,7 @@ export const DEFAULT_CERT: Certificate = {
   inspection_body: "Тоҷикстандарт",
   special_notes: "",
   signatory: "Раҳмон И.Х.",
+  signature: "",
 
   application_number: "",
   plan_number: "",
@@ -107,6 +109,7 @@ export function emptyCertificate(): Certificate {
     inspection_body: "Тоҷикстандарт",
     special_notes: "",
     signatory: "Раҳмон И.Х.",
+    signature: "",
     application_number: "",
     plan_number: "",
     inspector: "",

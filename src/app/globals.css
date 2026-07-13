@@ -61,3 +61,379 @@ body {
   opacity: 0.55;
   cursor: not-allowed;
 }
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+/* ============================================================================
+   ЛИНЕЙКИ (как в Word) — горизонтальная сверху и вертикальная слева.
+   Только экран; при печати скрываются, лист печатается как обычно.
+   ============================================================================ */
+.cert-rulers {
+  display: grid;
+  grid-template-columns: 26px 210mm;
+  grid-template-rows: 26px auto;
+  width: max-content;
+  margin: 0 auto;
+}
+.ruler-corner {
+  background: #f1f5f9;
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+.ruler {
+  position: relative;
+  background: #ffffff;
+  user-select: none;
+  overflow: hidden;
+}
+.ruler-h {
+  border-bottom: 1px solid #cbd5e1;
+}
+.ruler-v {
+  border-right: 1px solid #cbd5e1;
+}
+/* Затемнение полей */
+.ruler-shade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(148, 163, 184, 0.28);
+}
+.ruler-shade-v {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(148, 163, 184, 0.28);
+}
+/* Штрихи: см (высокие) + мм (короткие), прижаты к краю у листа */
+.ruler-ticks-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+      to right,
+      #64748b 0,
+      #64748b 1px,
+      transparent 1px,
+      transparent 1cm
+    ),
+    repeating-linear-gradient(to right, #cbd5e1 0, #cbd5e1 1px, transparent 1px, transparent 1mm);
+  background-size: 100% 9px, 100% 5px;
+  background-position: bottom left;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.ruler-ticks-v {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background-image: repeating-linear-gradient(
+      to bottom,
+      #64748b 0,
+      #64748b 1px,
+      transparent 1px,
+      transparent 1cm
+    ),
+    repeating-linear-gradient(to bottom, #cbd5e1 0, #cbd5e1 1px, transparent 1px, transparent 1mm);
+  background-size: 9px 100%, 5px 100%;
+  background-position: top right;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.ruler-num {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 8px;
+  line-height: 1;
+  color: #475569;
+  font-family: "Segoe UI", sans-serif;
+  pointer-events: none;
+}
+.ruler-num-v {
+  top: auto;
+  left: 3px;
+  transform: translateY(-50%);
+}
+/* Маркеры полей */
+.ruler-handle-h {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  z-index: 5;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+.ruler-handle-h::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(37, 99, 235, 0.55);
+}
+.ruler-handle-v {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.ruler-handle-v::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(37, 99, 235, 0.55);
+}
+.ruler-tri {
+  position: relative;
+  z-index: 1;
+}
+.ruler-tri-down {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #2563eb;
+}
+.ruler-tri-right {
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid #2563eb;
+}
+.ruler-page {
+  position: relative;
+}
+.ruler-readout {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+  z-index: 30;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   Плавающая панель форматирования выделенного текста поля
+   ============================================================================ */
+.fmt-toolbar {
+  position: fixed;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #1e293b;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+  z-index: 200;
+}
+.fmt-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 5px;
+  background: #334155;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fmt-btn:hover {
+  background: #475569;
+}
+.fmt-size {
+  min-width: 30px;
+  text-align: center;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.fmt-sep {
+  width: 1px;
+  height: 18px;
+  background: #475569;
+  margin: 0 2px;
+}
+.fmt-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid #94a3b8;
+  cursor: pointer;
+  padding: 0;
+}
+.fmt-swatch-white {
+  border-color: #cbd5e1;
+}
+.fmt-swatch:hover {
+  outline: 2px solid #60a5fa;
+}
+
+/* ============================================================================
+   Диалог «Сортировка» (Excel-подобный)
+   ============================================================================ */
+.sort-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 90px;
+  z-index: 300;
+}
+.sort-dialog {
+  width: min(760px, 94vw);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
+  font-size: 14px;
+}
+.sort-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f1f5f9;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.sort-x {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--muted);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.sort-x:hover {
+  background: #e2e8f0;
+}
+.sort-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sort-headers {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.sort-grid {
+  padding: 12px 14px;
+  max-height: 46vh;
+  overflow: auto;
+}
+.sort-grid-head,
+.sort-row {
+  display: grid;
+  grid-template-columns: 2.4fr 1.4fr 1.6fr;
+  gap: 8px;
+}
+.sort-grid-head {
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 8px 6px;
+  font-size: 13px;
+}
+.sort-row {
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.sort-row-selected {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.sort-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sort-prefix {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sort-cell select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+.sort-cell select:disabled {
+  background: #f8fafc;
+  color: var(--muted);
+}
+.sort-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+/* Excel-подобная подсветка ячеек AG Grid */
+.ag-theme-quartz .ag-cell-focus:not(.ag-cell-range-selected) {
+  border: 1px solid #2563eb !important;
+  background: rgba(37, 99, 235, 0.06);
+}
+
+@media print {
+  /* При печати линейки убираем, лист печатается как обычный блок */
+  .cert-rulers {
+    display: block !important;
+    width: auto !important;
+    margin: 0 !important;
+  }
+  .ruler-corner,
+  .ruler-h,
+  .ruler-v {
+    display: none !important;
+  }
+  .ruler-page {
+    position: static !important;
+  }
+}

@@ -27,6 +27,7 @@ create table if not exists public.certificates (
   inspection_body    text,
   special_notes      text,
   signatory          text,
+  signature          text,
 
   -- Дополнительные данные (реестр, не печатаются)
   application_number text,

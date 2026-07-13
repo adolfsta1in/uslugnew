@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
-import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
@@ -13,9 +13,12 @@ import {
   $createParagraphNode,
   $createTextNode,
   KEY_ENTER_COMMAND,
+  FOCUS_COMMAND,
   COMMAND_PRIORITY_HIGH,
+  COMMAND_PRIORITY_LOW,
   type EditorState,
 } from "lexical";
+import { setActiveEditor } from "../lib/activeEditor";
 
 interface EditableFieldProps {
   /** Начальное значение (устанавливается один раз при монтировании). */
@@ -64,6 +67,22 @@ function SingleLinePlugin() {
   return null;
 }
 
+/** Регистрирует поле как «активное» при фокусе — для панели форматирования. */
+function ActiveEditorPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    return editor.registerCommand(
+      FOCUS_COMMAND,
+      () => {
+        setActiveEditor(editor);
+        return false;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor]);
+  return null;
+}
+
 /**
  * Одно редактируемое поле сертификата на базе Lexical (rich text editor).
  * Каждое поле — изолированный экземпляр редактора, поэтому постоянный текст
@@ -104,12 +123,13 @@ export default function EditableField({
   return (
     <span className={classNames} style={width ? { minWidth: width } : undefined}>
       <LexicalComposer initialConfig={initialConfig}>
-        <PlainTextPlugin
+        <RichTextPlugin
           contentEditable={<ContentEditable className="field-editor" />}
           placeholder={hint ? <span className="field-placeholder">{hint}</span> : null}
           ErrorBoundary={LexicalErrorBoundary}
         />
         <HistoryPlugin />
+        <ActiveEditorPlugin />
         {!multiline && <SingleLinePlugin />}
         <OnChangePlugin
           ignoreSelectionChange

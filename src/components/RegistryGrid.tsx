@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
 import type {
   ColDef,
+  ColumnState,
   GridReadyEvent,
   CellValueChangedEvent,
+  CellFocusedEvent,
   SelectionChangedEvent,
   RowDoubleClickedEvent,
   GridApi,
@@ -16,22 +18,28 @@ import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 import { toast } from "./Toast";
+import SortDialog, { SortColumn, SortLevel } from "./SortDialog";
 import { Certificate, REGISTRY_COLUMNS, issueDate } from "../lib/certificate";
 import {
   listCertificates,
   updateCertificate,
   deleteCertificate,
 } from "../lib/certificateStore";
-import { isSupabaseConfigured } from "../lib/supabaseClient";
+import { isSupabaseConfigured, testSupabaseConnection } from "../lib/supabaseClient";
 
 export default function RegistryGrid() {
   const router = useRouter();
   const gridApiRef = useRef<GridApi | null>(null);
   const [rowData, setRowData] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Certificate | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Certificate[]>([]);
   const [quick, setQuick] = useState("");
   const [stats, setStats] = useState({ count: 0, sum: 0 });
+  const [sortOpen, setSortOpen] = useState(false);
+  const [initialSort, setInitialSort] = useState<SortLevel[]>([]);
+  const focusedColRef = useRef<string | null>(null);
+
+  const selected = selectedRows[0] ?? null;
 
   const recomputeStats = useCallback((rows: Certificate[]) => {
     const count = rows.length;
@@ -61,8 +69,19 @@ export default function RegistryGrid() {
     load();
   }, [load]);
 
+  // Столбцы, доступные для сортировки (для диалога «Сортировка»).
+  const sortableColumns = useMemo<SortColumn[]>(
+    () =>
+      REGISTRY_COLUMNS.map((c) => ({
+        colId: c.computed === "issue_date" ? "issue_date" : (c.field as string),
+        header: c.header,
+        numeric: !!c.numeric,
+      })),
+    []
+  );
+
   const columnDefs = useMemo<ColDef[]>(() => {
-    return REGISTRY_COLUMNS.map((col) => {
+    return REGISTRY_COLUMNS.map((col, idx) => {
       const def: ColDef = {
         headerName: col.header,
         editable: col.editable ?? false,
@@ -73,6 +92,12 @@ export default function RegistryGrid() {
         resizable: true,
         headerTooltip: col.header,
       };
+      // Первый столбец получает чекбоксы выделения строк (как в Excel слева).
+      if (idx === 0) {
+        def.checkboxSelection = true;
+        def.headerCheckboxSelection = true;
+        def.headerCheckboxSelectionFilteredOnly = true;
+      }
       if (col.computed === "issue_date") {
         def.colId = "issue_date";
         def.valueGetter = (p: ValueGetterParams) =>
@@ -119,8 +144,13 @@ export default function RegistryGrid() {
   };
 
   const onSelectionChanged = (e: SelectionChangedEvent<Certificate>) => {
-    const rows = e.api.getSelectedRows();
-    setSelected(rows[0] ?? null);
+    setSelectedRows(e.api.getSelectedRows());
+  };
+
+  const onCellFocused = (e: CellFocusedEvent) => {
+    const col = e.column;
+    focusedColRef.current =
+      typeof col === "string" ? col : col ? col.getColId() : null;
   };
 
   const openInEditor = (rec: Certificate | null) => {
@@ -132,15 +162,19 @@ export default function RegistryGrid() {
   };
 
   const handleDelete = async () => {
-    if (!selected?.id) return;
-    if (!window.confirm("Удалить выбранный сертификат из реестра?")) return;
+    if (selectedRows.length === 0) return;
+    const n = selectedRows.length;
+    if (!window.confirm(`Удалить выбранные записи (${n}) из реестра?`)) return;
     try {
-      await deleteCertificate(selected.id);
-      const rows = rowData.filter((r) => r.id !== selected.id);
+      const ids = selectedRows.map((r) => r.id).filter(Boolean) as string[];
+      for (const id of ids) {
+        await deleteCertificate(id);
+      }
+      const rows = rowData.filter((r) => !ids.includes(r.id as string));
       setRowData(rows);
       recomputeStats(rows);
-      setSelected(null);
-      toast("Запись удалена", "success");
+      setSelectedRows([]);
+      toast(`Удалено записей: ${n}`, "success");
     } catch (e) {
       toast("Ошибка удаления: " + (e as Error).message, "error");
     }
@@ -153,6 +187,53 @@ export default function RegistryGrid() {
   const onQuickChange = (v: string) => {
     setQuick(v);
     gridApiRef.current?.setGridOption("quickFilterText", v);
+  };
+
+  // --- Сортировка (Excel-подобный диалог) ---
+  const openSort = () => {
+    const api = gridApiRef.current;
+    let levels: SortLevel[] = [];
+    if (api) {
+      levels = api
+        .getColumnState()
+        .filter((s) => s.sort)
+        .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+        .map((s) => ({ colId: s.colId, dir: s.sort as "asc" | "desc" }));
+    }
+    // Если сортировки ещё нет — подставим столбец сфокусированной ячейки.
+    if (levels.length === 0 && focusedColRef.current) {
+      const known = sortableColumns.find((c) => c.colId === focusedColRef.current);
+      if (known) levels = [{ colId: known.colId, dir: "asc" }];
+    }
+    setInitialSort(levels);
+    setSortOpen(true);
+  };
+
+  const applySort = (levels: SortLevel[]) => {
+    const api = gridApiRef.current;
+    if (api) {
+      const state: ColumnState[] = levels.map((l, i) => ({
+        colId: l.colId,
+        sort: l.dir,
+        sortIndex: i,
+      }));
+      api.applyColumnState({ state, defaultState: { sort: null } });
+    }
+    setSortOpen(false);
+    toast(
+      levels.length ? `Сортировка применена (уровней: ${levels.length})` : "Сортировка сброшена",
+      "success"
+    );
+  };
+
+  const clearSort = () => {
+    gridApiRef.current?.applyColumnState({ defaultState: { sort: null } });
+    toast("Сортировка сброшена", "info");
+  };
+
+  const handleCheckSupabase = async () => {
+    const res = await testSupabaseConnection();
+    toast(res.message, res.ok ? "success" : "error");
   };
 
   return (
@@ -180,14 +261,25 @@ export default function RegistryGrid() {
             minWidth: 240,
           }}
         />
-        <button className="btn btn-primary" disabled={!selected} onClick={() => openInEditor(selected)}>
+        <button className="btn btn-primary" onClick={openSort}>
+          ⇅ Сортировка…
+        </button>
+        <button className="btn" onClick={clearSort}>
+          ✖ Сбросить сортировку
+        </button>
+        <button className="btn" disabled={!selected} onClick={() => openInEditor(selected)}>
           📂 Открыть
         </button>
-        <button className="btn btn-danger" disabled={!selected} onClick={handleDelete}>
-          🗑️ Удалить
+        <button
+          className="btn btn-danger"
+          disabled={selectedRows.length === 0}
+          onClick={handleDelete}
+        >
+          🗑️ Удалить{selectedRows.length > 1 ? ` (${selectedRows.length})` : ""}
         </button>
         <button className="btn" onClick={handleExport}>⬇️ Экспорт CSV</button>
         <button className="btn" onClick={load}>🔄 Обновить</button>
+        <button className="btn" onClick={handleCheckSupabase}>🔌 Проверить Supabase</button>
         <div style={{ marginLeft: "auto", fontSize: 14, color: "var(--muted)" }}>
           Всего: <b>{stats.count}</b> &nbsp;|&nbsp; Сумма:{" "}
           <b>{stats.sum.toLocaleString("ru-RU")}</b>
@@ -202,23 +294,37 @@ export default function RegistryGrid() {
             rowData={rowData}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
-            rowSelection="single"
+            rowSelection="multiple"
+            suppressRowClickSelection
+            multiSortKey="ctrl"
             animateRows
             onGridReady={onGridReady}
             onCellValueChanged={onCellValueChanged}
             onSelectionChanged={onSelectionChanged}
+            onCellFocused={onCellFocused}
             onRowDoubleClicked={onRowDoubleClicked}
             stopEditingWhenCellsLoseFocus
             enableCellTextSelection
+            ensureDomOrder
             tooltipShowDelay={300}
           />
         </div>
       )}
       <p style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
-        Двойной клик по строке открывает сертификат для редактирования. Столбцы можно сортировать,
-        фильтровать, менять ширину, перемещать и закреплять через меню столбца. «Дата выдачи»
-        вычисляется из даты «Эътибор дорад аз» и редактируется в самом сертификате.
+        Выделяйте ячейки мышью, копируйте (Ctrl+C). Флажки слева выделяют строки (можно несколько —
+        затем «Открыть»/«Удалить»). Кнопка «Сортировка…» открывает многоуровневую сортировку как в
+        Excel. Клик по заголовку сортирует столбец, Ctrl+клик — добавляет столбец к сортировке.
+        Двойной клик по строке открывает сертификат. «Дата выдачи» вычисляется из даты «Эътибор дорад
+        аз».
       </p>
+
+      <SortDialog
+        open={sortOpen}
+        columns={sortableColumns}
+        initial={initialSort}
+        onApply={applySort}
+        onClose={() => setSortOpen(false)}
+      />
     </div>
   );
 }
