@@ -540,6 +540,34 @@ body {
   color: var(--muted);
   padding: 24px;
 }
+/* Строка состояния: итоги по выделению (как в Excel) */
+.xl-statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.xl-statusbar b {
+  color: var(--text);
+  font-weight: 600;
+}
+.xl-statusbar .xl-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+.xl-statusbar .xl-sum b {
+  color: var(--accent);
+}
 
 @media print {
   /* При печати линейки убираем, лист печатается как обычный блок */

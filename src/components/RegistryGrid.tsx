@@ -293,6 +293,32 @@ export default function RegistryGrid() {
     return out;
   }, [sel, rows]);
 
+  // --- Итоги по выделенным ячейкам (как строка состояния в Excel) ---
+  // Число распознаётся только если ВСЯ ячейка — число (Number), поэтому даты и
+  // текст («23 июни 2026», «TJ.762…») не попадают в сумму.
+  const selStats = useMemo(() => {
+    if (!sel) return null;
+    const b = bounds(sel);
+    let cells = 0;
+    let numeric = 0;
+    let sum = 0;
+    for (let r = b.minR; r <= b.maxR && r < rows.length; r++) {
+      for (let c = b.minC; c <= b.maxC; c++) {
+        const t = cellText(rows[r], COLUMNS[c]).trim();
+        if (t === "") continue;
+        cells++;
+        const n = Number(t.replace(/\s+/g, ""));
+        if (Number.isFinite(n)) {
+          numeric++;
+          sum += n;
+        }
+      }
+    }
+    return { cells, numeric, sum, avg: numeric ? sum / numeric : 0 };
+  }, [sel, rows]);
+
+  const showSelStats = !!selStats && (selStats.numeric > 0 || selStats.cells > 1);
+
   const openInEditor = (rec: Certificate | null) => {
     if (rec?.id) router.push(`/new?id=${rec.id}`);
   };
@@ -500,12 +526,30 @@ export default function RegistryGrid() {
         </div>
       )}
 
+      {/* Строка состояния: итоги по выделенным ячейкам (как в Excel) */}
+      {!loading && showSelStats && selStats && (
+        <div className="xl-statusbar">
+          <span>Выделено ячеек: <b>{selStats.cells}</b></span>
+          {selStats.numeric > 0 && (
+            <>
+              <span className="xl-sep" />
+              <span>Числовых: <b>{selStats.numeric}</b></span>
+              <span className="xl-sep" />
+              <span>Среднее: <b>{selStats.avg.toLocaleString("ru-RU", { maximumFractionDigits: 2 })}</b></span>
+              <span className="xl-sep" />
+              <span className="xl-sum">Сумма: <b>{selStats.sum.toLocaleString("ru-RU")}</b></span>
+            </>
+          )}
+        </div>
+      )}
+
       <p style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
         Протяните мышью по ячейкам, чтобы выделить диапазон; тяните по номерам строк слева — чтобы
         выделять строки. Ctrl+C — копировать выделение (вставляется в Excel). «Сортировка…» —
-        многоуровневая (предзаполняется из выделения). Клик по заголовку сортирует столбец, Ctrl+клик
-        — добавляет к сортировке. Двойной клик по ячейке — редактирование; по номеру строки — открыть
-        сертификат.
+        многоуровневая (предзаполняется из выделения). Выделите числовые ячейки (напр. столбец
+        «Сумма») — снизу появится их сумма, среднее и количество. Клик по заголовку сортирует столбец,
+        Ctrl+клик — добавляет к сортировке. Двойной клик по ячейке — редактирование; по номеру строки
+        — открыть сертификат.
       </p>
 
       <SortDialog
