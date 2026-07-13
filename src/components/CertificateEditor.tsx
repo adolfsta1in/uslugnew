@@ -39,8 +39,8 @@ export default function CertificateEditor() {
   const [dirty, setDirty] = useState(false);
   const [margins, setMargins] = useState<Margins>(DEFAULT_MARGINS);
   const [showRulers, setShowRulers] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
   const didInit = useRef(false);
-  const settingsInit = useRef(false);
 
   // Поле-хелпер: значение берётся один раз при монтировании (Lexical неуправляем),
   // поэтому при загрузке/очистке меняем formKey, чтобы поля пересоздались.
@@ -100,7 +100,9 @@ export default function CertificateEditor() {
     }
   }, [cert]);
 
-  // Загрузка сохранённых полей (отступов) и настройки линеек — один раз.
+  // Загрузка сохранённых отступов (последних применённых/распечатанных) и
+  // настройки линеек — один раз при открытии. setHydrated в том же эффекте
+  // батчится с setMargins, поэтому первое сохранение не затирает загруженное.
   useEffect(() => {
     try {
       const m = localStorage.getItem(MARGINS_KEY);
@@ -110,28 +112,28 @@ export default function CertificateEditor() {
     } catch {
       /* ignore */
     }
-    settingsInit.current = true;
+    setHydrated(true);
   }, []);
 
-  // Сохранение отступов полей бланка.
+  // Сохранение отступов полей бланка (сохраняются между сеансами).
   useEffect(() => {
-    if (!settingsInit.current) return;
+    if (!hydrated) return;
     try {
       localStorage.setItem(MARGINS_KEY, JSON.stringify(margins));
     } catch {
       /* ignore */
     }
-  }, [margins]);
+  }, [margins, hydrated]);
 
   // Сохранение видимости линеек.
   useEffect(() => {
-    if (!settingsInit.current) return;
+    if (!hydrated) return;
     try {
       localStorage.setItem(RULERS_KEY, showRulers ? "1" : "0");
     } catch {
       /* ignore */
     }
-  }, [showRulers]);
+  }, [showRulers, hydrated]);
 
   // Предупреждение при уходе со страницы с несохранёнными изменениями.
   useEffect(() => {
@@ -173,7 +175,15 @@ export default function CertificateEditor() {
   };
 
   const handlePrint = () => {
+    // То, что распечатали, остаётся стандартным по умолчанию: фиксируем
+    // текущие отступы линейки, чтобы в следующий раз бланк открылся так же.
+    try {
+      localStorage.setItem(MARGINS_KEY, JSON.stringify(margins));
+    } catch {
+      /* ignore */
+    }
     window.print();
+    toast("Отступы линейки сохранены — так и останется по умолчанию", "success");
   };
 
   const handleClear = () => {
