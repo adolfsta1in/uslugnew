@@ -2,20 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AgGridReact } from "ag-grid-react";
-import type {
-  ColDef,
-  ColumnState,
-  GridReadyEvent,
-  CellValueChangedEvent,
-  CellFocusedEvent,
-  SelectionChangedEvent,
-  RowDoubleClickedEvent,
-  GridApi,
-  ValueGetterParams,
-} from "ag-grid-community";
-import "ag-grid-community/styles/ag-grid.css";
-import "ag-grid-community/styles/ag-theme-quartz.css";
 
 import { toast } from "./Toast";
 import SortDialog, { SortColumn, SortLevel } from "./SortDialog";
@@ -27,25 +13,85 @@ import {
 } from "../lib/certificateStore";
 import { isSupabaseConfigured, testSupabaseConnection } from "../lib/supabaseClient";
 
+// ============================================================================
+// Реестр сертификатов — собственная Excel-подобная таблица.
+// • Настоящие ячейки с рамками, номера строк слева, «шапка» и первый столбец
+//   закреплены (sticky).
+// • Выделение диапазона ячеек и строк протягиванием мыши (как в Excel).
+// • Копирование выделения (Ctrl+C) в буфер как TSV (вставляется в Excel).
+// • Сортировка: клик по заголовку (Ctrl+клик — добавить столбец) и
+//   многоуровневый диалог «Сортировка», предзаполняемый из выделения.
+// • Редактирование ячейки по двойному клику → сохранение в Supabase.
+// AG Grid Community не умеет выделять диапазон ячеек (это Enterprise), поэтому
+// таблица реализована вручную.
+// ============================================================================
+
+interface GridColumn {
+  colId: string;
+  header: string;
+  field?: keyof Certificate;
+  computed?: "issue_date";
+  editable: boolean;
+  numeric: boolean;
+  minWidth: number;
+}
+
+const COLUMNS: GridColumn[] = REGISTRY_COLUMNS.map((c) => ({
+  colId: c.computed === "issue_date" ? "issue_date" : (c.field as string),
+  header: c.header,
+  field: c.field,
+  computed: c.computed,
+  editable: !!c.editable,
+  numeric: !!c.numeric,
+  minWidth: c.minWidth ?? 100,
+}));
+
+const SORT_COLUMNS: SortColumn[] = COLUMNS.map((c) => ({
+  colId: c.colId,
+  header: c.header,
+  numeric: c.numeric,
+}));
+
+/** Отображаемое значение ячейки (строкой). */
+function cellText(row: Certificate, col: GridColumn): string {
+  if (col.computed === "issue_date") return issueDate(row);
+  const v = col.field ? row[col.field] : "";
+  return v == null ? "" : String(v);
+}
+
+interface Cell {
+  r: number;
+  c: number;
+}
+interface Selection {
+  a: Cell; // якорь
+  f: Cell; // фокус
+}
+
+function bounds(sel: Selection) {
+  return {
+    minR: Math.min(sel.a.r, sel.f.r),
+    maxR: Math.max(sel.a.r, sel.f.r),
+    minC: Math.min(sel.a.c, sel.f.c),
+    maxC: Math.max(sel.a.c, sel.f.c),
+  };
+}
+
 export default function RegistryGrid() {
   const router = useRouter();
-  const gridApiRef = useRef<GridApi | null>(null);
   const [rowData, setRowData] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedRows, setSelectedRows] = useState<Certificate[]>([]);
   const [quick, setQuick] = useState("");
-  const [stats, setStats] = useState({ count: 0, sum: 0 });
+  const [sortModel, setSortModel] = useState<SortLevel[]>([]);
+  const [sel, setSel] = useState<Selection | null>(null);
+  const [editing, setEditing] = useState<{ id: string; colId: string; value: string } | null>(
+    null
+  );
   const [sortOpen, setSortOpen] = useState(false);
   const [initialSort, setInitialSort] = useState<SortLevel[]>([]);
-  const focusedColRef = useRef<string | null>(null);
 
-  const selected = selectedRows[0] ?? null;
-
-  const recomputeStats = useCallback((rows: Certificate[]) => {
-    const count = rows.length;
-    const sum = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
-    setStats({ count, sum });
-  }, []);
+  const draggingRef = useRef(false);
+  const dragModeRef = useRef<"cell" | "row" | null>(null);
 
   const load = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -57,108 +103,198 @@ export default function RegistryGrid() {
     try {
       const rows = await listCertificates();
       setRowData(rows);
-      recomputeStats(rows);
     } catch (e) {
       toast("Ошибка загрузки реестра: " + (e as Error).message, "error");
     } finally {
       setLoading(false);
     }
-  }, [recomputeStats]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // Столбцы, доступные для сортировки (для диалога «Сортировка»).
-  const sortableColumns = useMemo<SortColumn[]>(
-    () =>
-      REGISTRY_COLUMNS.map((c) => ({
-        colId: c.computed === "issue_date" ? "issue_date" : (c.field as string),
-        header: c.header,
-        numeric: !!c.numeric,
-      })),
-    []
-  );
-
-  const columnDefs = useMemo<ColDef[]>(() => {
-    return REGISTRY_COLUMNS.map((col, idx) => {
-      const def: ColDef = {
-        headerName: col.header,
-        editable: col.editable ?? false,
-        minWidth: col.minWidth,
-        filter: true,
-        floatingFilter: true,
-        sortable: true,
-        resizable: true,
-        headerTooltip: col.header,
-      };
-      // Первый столбец получает чекбоксы выделения строк (как в Excel слева).
-      if (idx === 0) {
-        def.checkboxSelection = true;
-        def.headerCheckboxSelection = true;
-        def.headerCheckboxSelectionFilteredOnly = true;
-      }
-      if (col.computed === "issue_date") {
-        def.colId = "issue_date";
-        def.valueGetter = (p: ValueGetterParams) =>
-          p.data ? issueDate(p.data as Certificate) : "";
-      } else if (col.field) {
-        def.field = col.field as string;
-        if (col.numeric) {
-          def.filter = "agNumberColumnFilter";
-          def.type = "numericColumn";
-        }
-      }
-      return def;
-    });
+  // Завершение протягивания в любом месте окна.
+  useEffect(() => {
+    const up = () => {
+      draggingRef.current = false;
+      dragModeRef.current = null;
+    };
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
   }, []);
 
-  const defaultColDef = useMemo<ColDef>(
-    () => ({
-      flex: 1,
-      minWidth: 100,
-      // pinning/move/resize доступны в Community через меню столбца
-    }),
-    []
-  );
+  // Фильтрация по строке поиска.
+  const filtered = useMemo(() => {
+    const q = quick.trim().toLowerCase();
+    if (!q) return rowData;
+    return rowData.filter((row) =>
+      COLUMNS.some((col) => cellText(row, col).toLowerCase().includes(q))
+    );
+  }, [rowData, quick]);
 
-  const onGridReady = (e: GridReadyEvent) => {
-    gridApiRef.current = e.api;
+  // Сортировка по модели (многоуровневая).
+  const rows = useMemo(() => {
+    if (sortModel.length === 0) return filtered;
+    const colMap = new Map(COLUMNS.map((c) => [c.colId, c]));
+    const data = [...filtered];
+    data.sort((a, b) => {
+      for (const lvl of sortModel) {
+        const col = colMap.get(lvl.colId);
+        if (!col) continue;
+        const dir = lvl.dir === "asc" ? 1 : -1;
+        let cmp = 0;
+        if (col.numeric) {
+          const av = col.field ? Number(a[col.field]) || 0 : 0;
+          const bv = col.field ? Number(b[col.field]) || 0 : 0;
+          cmp = av - bv;
+        } else {
+          cmp = cellText(a, col).localeCompare(cellText(b, col), "ru");
+        }
+        if (cmp !== 0) return dir * cmp;
+      }
+      return 0;
+    });
+    return data;
+  }, [filtered, sortModel]);
+
+  const stats = useMemo(() => {
+    const count = rows.length;
+    const sum = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
+    return { count, sum };
+  }, [rows]);
+
+  // Сброс выделения, если данные изменились и индексы вышли за границы.
+  useEffect(() => {
+    if (sel && (sel.a.r >= rows.length || sel.f.r >= rows.length)) setSel(null);
+  }, [rows.length, sel]);
+
+  const isSel = (r: number, c: number) => {
+    if (!sel) return false;
+    const b = bounds(sel);
+    return r >= b.minR && r <= b.maxR && c >= b.minC && c <= b.maxC;
   };
 
-  const onCellValueChanged = async (e: CellValueChangedEvent<Certificate>) => {
-    const field = e.colDef.field as keyof Certificate | undefined;
-    const id = e.data.id;
-    if (!field || !id) return;
-    try {
-      let value: unknown = e.newValue;
-      if (field === "amount") value = value === "" || value == null ? null : Number(value);
-      await updateCertificate(id, { [field]: value } as Partial<Certificate>);
-      recomputeStats(rowData);
-      toast("Ячейка обновлена", "success");
-    } catch (err) {
-      toast("Ошибка обновления: " + (err as Error).message, "error");
-      // откат значения в таблице
-      e.node.setDataValue(field as string, e.oldValue);
+  // --- Мышь: выделение ячеек ---
+  const onCellMouseDown = (r: number, c: number, e: React.MouseEvent) => {
+    if (e.button !== 0 || editing) return;
+    e.preventDefault();
+    draggingRef.current = true;
+    dragModeRef.current = "cell";
+    setSel({ a: { r, c }, f: { r, c } });
+  };
+  const onCellMouseEnter = (r: number, c: number) => {
+    if (!draggingRef.current) return;
+    if (dragModeRef.current === "row") {
+      setSel((s) => (s ? { a: { r: s.a.r, c: 0 }, f: { r, c: COLUMNS.length - 1 } } : s));
+    } else {
+      setSel((s) => (s ? { ...s, f: { r, c } } : s));
     }
   };
 
-  const onSelectionChanged = (e: SelectionChangedEvent<Certificate>) => {
-    setSelectedRows(e.api.getSelectedRows());
+  // --- Мышь: выделение строк по номеру ---
+  const onRowHeadMouseDown = (r: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    draggingRef.current = true;
+    dragModeRef.current = "row";
+    setSel({ a: { r, c: 0 }, f: { r, c: COLUMNS.length - 1 } });
   };
 
-  const onCellFocused = (e: CellFocusedEvent) => {
-    const col = e.column;
-    focusedColRef.current =
-      typeof col === "string" ? col : col ? col.getColId() : null;
+  // --- Сортировка кликом по заголовку (Ctrl+клик — многоуровневая) ---
+  const onHeaderClick = (c: number, e: React.MouseEvent) => {
+    const col = COLUMNS[c];
+    setSortModel((prev) => {
+      const existing = prev.find((l) => l.colId === col.colId);
+      if (e.ctrlKey || e.metaKey) {
+        // добавить/переключить в многоуровневой
+        if (!existing) return [...prev, { colId: col.colId, dir: "asc" }];
+        if (existing.dir === "asc")
+          return prev.map((l) => (l.colId === col.colId ? { ...l, dir: "desc" } : l));
+        return prev.filter((l) => l.colId !== col.colId);
+      }
+      // одиночная сортировка: asc → desc → нет
+      if (!existing || prev.length > 1) return [{ colId: col.colId, dir: "asc" }];
+      if (existing.dir === "asc") return [{ colId: col.colId, dir: "desc" }];
+      return [];
+    });
   };
+
+  const sortIndicator = (colId: string) => {
+    const idx = sortModel.findIndex((l) => l.colId === colId);
+    if (idx < 0) return null;
+    const arrow = sortModel[idx].dir === "asc" ? "▲" : "▼";
+    return (
+      <span className="xl-sort">
+        {arrow}
+        {sortModel.length > 1 ? <sup>{idx + 1}</sup> : null}
+      </span>
+    );
+  };
+
+  // --- Редактирование ячейки ---
+  const startEdit = (row: Certificate, col: GridColumn) => {
+    if (!col.editable || !col.field || !row.id) return;
+    setEditing({ id: row.id, colId: col.colId, value: cellText(row, col) });
+  };
+  const commitEdit = async () => {
+    if (!editing) return;
+    const col = COLUMNS.find((c) => c.colId === editing.colId);
+    const { id, value } = editing;
+    setEditing(null);
+    if (!col || !col.field) return;
+    const row = rowData.find((r) => r.id === id);
+    if (!row) return;
+    if (cellText(row, col) === value) return; // без изменений
+    let newValue: unknown = value;
+    if (col.numeric) newValue = value === "" ? null : Number(value);
+    setRowData((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [col.field as string]: newValue } : r))
+    );
+    try {
+      await updateCertificate(id, { [col.field]: newValue } as Partial<Certificate>);
+      toast("Ячейка обновлена", "success");
+    } catch (e) {
+      toast("Ошибка обновления: " + (e as Error).message, "error");
+      load(); // откат — перезагрузка
+    }
+  };
+
+  // --- Копирование выделения (Ctrl+C) ---
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editing) return;
+      if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C") && sel) {
+        const b = bounds(sel);
+        const lines: string[] = [];
+        for (let r = b.minR; r <= b.maxR; r++) {
+          const cells: string[] = [];
+          for (let c = b.minC; c <= b.maxC; c++) {
+            cells.push(cellText(rows[r], COLUMNS[c]));
+          }
+          lines.push(cells.join("\t"));
+        }
+        navigator.clipboard?.writeText(lines.join("\n")).then(
+          () => toast("Скопировано в буфер обмена", "success"),
+          () => {}
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sel, rows, editing]);
+
+  // --- Выбранные строки (для операций) ---
+  const selectedRows = useMemo(() => {
+    if (!sel) return [] as Certificate[];
+    const b = bounds(sel);
+    const out: Certificate[] = [];
+    for (let r = b.minR; r <= b.maxR && r < rows.length; r++) out.push(rows[r]);
+    return out;
+  }, [sel, rows]);
 
   const openInEditor = (rec: Certificate | null) => {
     if (rec?.id) router.push(`/new?id=${rec.id}`);
-  };
-
-  const onRowDoubleClicked = (e: RowDoubleClickedEvent<Certificate>) => {
-    openInEditor(e.data ?? null);
   };
 
   const handleDelete = async () => {
@@ -167,67 +303,55 @@ export default function RegistryGrid() {
     if (!window.confirm(`Удалить выбранные записи (${n}) из реестра?`)) return;
     try {
       const ids = selectedRows.map((r) => r.id).filter(Boolean) as string[];
-      for (const id of ids) {
-        await deleteCertificate(id);
-      }
-      const rows = rowData.filter((r) => !ids.includes(r.id as string));
-      setRowData(rows);
-      recomputeStats(rows);
-      setSelectedRows([]);
+      for (const id of ids) await deleteCertificate(id);
+      setRowData((prev) => prev.filter((r) => !ids.includes(r.id as string)));
+      setSel(null);
       toast(`Удалено записей: ${n}`, "success");
     } catch (e) {
       toast("Ошибка удаления: " + (e as Error).message, "error");
     }
   };
 
+  // --- Экспорт CSV ---
   const handleExport = () => {
-    gridApiRef.current?.exportDataAsCsv({ fileName: "reestr-sertifikatov.csv" });
+    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const header = COLUMNS.map((c) => esc(c.header)).join(",");
+    const body = rows
+      .map((row) => COLUMNS.map((c) => esc(cellText(row, c))).join(","))
+      .join("\n");
+    const csv = "﻿" + header + "\n" + body; // BOM для Excel
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "reestr-sertifikatov.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const onQuickChange = (v: string) => {
-    setQuick(v);
-    gridApiRef.current?.setGridOption("quickFilterText", v);
-  };
-
-  // --- Сортировка (Excel-подобный диалог) ---
+  // --- Сортировка через диалог ---
   const openSort = () => {
-    const api = gridApiRef.current;
-    let levels: SortLevel[] = [];
-    if (api) {
-      levels = api
-        .getColumnState()
-        .filter((s) => s.sort)
-        .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
-        .map((s) => ({ colId: s.colId, dir: s.sort as "asc" | "desc" }));
-    }
-    // Если сортировки ещё нет — подставим столбец сфокусированной ячейки.
-    if (levels.length === 0 && focusedColRef.current) {
-      const known = sortableColumns.find((c) => c.colId === focusedColRef.current);
-      if (known) levels = [{ colId: known.colId, dir: "asc" }];
+    let levels = sortModel;
+    if (levels.length === 0 && sel) {
+      const b = bounds(sel);
+      levels = [];
+      for (let c = b.minC; c <= b.maxC; c++) {
+        levels.push({ colId: COLUMNS[c].colId, dir: "asc" });
+      }
     }
     setInitialSort(levels);
     setSortOpen(true);
   };
-
   const applySort = (levels: SortLevel[]) => {
-    const api = gridApiRef.current;
-    if (api) {
-      const state: ColumnState[] = levels.map((l, i) => ({
-        colId: l.colId,
-        sort: l.dir,
-        sortIndex: i,
-      }));
-      api.applyColumnState({ state, defaultState: { sort: null } });
-    }
+    setSortModel(levels);
     setSortOpen(false);
     toast(
       levels.length ? `Сортировка применена (уровней: ${levels.length})` : "Сортировка сброшена",
       "success"
     );
   };
-
   const clearSort = () => {
-    gridApiRef.current?.applyColumnState({ defaultState: { sort: null } });
+    setSortModel([]);
     toast("Сортировка сброшена", "info");
   };
 
@@ -236,9 +360,11 @@ export default function RegistryGrid() {
     toast(res.message, res.ok ? "success" : "error");
   };
 
+  const anchorRow = sel ? rows[Math.min(sel.a.r, sel.f.r)] ?? null : null;
+
   return (
     <div className="no-print" style={{ padding: "16px 20px 40px" }}>
-      {/* Панель инструментов реестра */}
+      {/* Панель инструментов */}
       <div
         style={{
           display: "flex",
@@ -252,7 +378,7 @@ export default function RegistryGrid() {
         <input
           placeholder="🔍 Поиск по всем колонкам…"
           value={quick}
-          onChange={(e) => onQuickChange(e.target.value)}
+          onChange={(e) => setQuick(e.target.value)}
           style={{
             padding: "8px 12px",
             border: "1px solid var(--border)",
@@ -264,10 +390,10 @@ export default function RegistryGrid() {
         <button className="btn btn-primary" onClick={openSort}>
           ⇅ Сортировка…
         </button>
-        <button className="btn" onClick={clearSort}>
+        <button className="btn" onClick={clearSort} disabled={sortModel.length === 0}>
           ✖ Сбросить сортировку
         </button>
-        <button className="btn" disabled={!selected} onClick={() => openInEditor(selected)}>
+        <button className="btn" disabled={!anchorRow} onClick={() => openInEditor(anchorRow)}>
           📂 Открыть
         </button>
         <button
@@ -289,38 +415,102 @@ export default function RegistryGrid() {
       {loading ? (
         <div style={{ padding: 24, color: "var(--muted)" }}>Загрузка данных…</div>
       ) : (
-        <div className="ag-theme-quartz" style={{ height: "calc(100vh - 180px)", width: "100%" }}>
-          <AgGridReact<Certificate>
-            rowData={rowData}
-            columnDefs={columnDefs}
-            defaultColDef={defaultColDef}
-            rowSelection="multiple"
-            suppressRowClickSelection
-            multiSortKey="ctrl"
-            animateRows
-            onGridReady={onGridReady}
-            onCellValueChanged={onCellValueChanged}
-            onSelectionChanged={onSelectionChanged}
-            onCellFocused={onCellFocused}
-            onRowDoubleClicked={onRowDoubleClicked}
-            stopEditingWhenCellsLoseFocus
-            enableCellTextSelection
-            ensureDomOrder
-            tooltipShowDelay={300}
-          />
+        <div className="xl-wrap" style={{ height: "calc(100vh - 200px)" }}>
+          <table className="xl-table">
+            <thead>
+              <tr>
+                <th className="xl-corner" />
+                {COLUMNS.map((col, c) => (
+                  <th
+                    key={col.colId}
+                    className="xl-head"
+                    style={{ minWidth: col.minWidth }}
+                    title={col.header}
+                    onClick={(e) => onHeaderClick(c, e)}
+                  >
+                    <span className="xl-head-text">{col.header}</span>
+                    {sortIndicator(col.colId)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, r) => (
+                <tr key={row.id ?? r}>
+                  <th
+                    className={"xl-rownum" + (sel && isSel(r, 0) ? " xl-rownum-sel" : "")}
+                    onMouseDown={(e) => onRowHeadMouseDown(r, e)}
+                    onDoubleClick={() => openInEditor(row)}
+                    title="Клик — выделить строку; двойной клик — открыть"
+                  >
+                    {r + 1}
+                  </th>
+                  {COLUMNS.map((col, c) => {
+                    const isEditing =
+                      editing && editing.id === row.id && editing.colId === col.colId;
+                    const selected = isSel(r, c);
+                    const active = sel && sel.a.r === r && sel.a.c === c;
+                    return (
+                      <td
+                        key={col.colId}
+                        className={
+                          "xl-cell" +
+                          (col.numeric ? " xl-num" : "") +
+                          (selected ? " sel" : "") +
+                          (active ? " active" : "") +
+                          (col.editable ? "" : " xl-readonly")
+                        }
+                        onMouseDown={(e) => onCellMouseDown(r, c, e)}
+                        onMouseEnter={() => onCellMouseEnter(r, c)}
+                        onDoubleClick={() => startEdit(row, col)}
+                      >
+                        {isEditing ? (
+                          <input
+                            className="xl-input"
+                            autoFocus
+                            type={col.numeric ? "number" : "text"}
+                            value={editing!.value}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              setEditing((ed) => (ed ? { ...ed, value: e.target.value } : ed))
+                            }
+                            onBlur={commitEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              else if (e.key === "Escape") setEditing(null);
+                            }}
+                          />
+                        ) : (
+                          cellText(row, col)
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td className="xl-empty" colSpan={COLUMNS.length + 1}>
+                    Нет записей
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
+
       <p style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
-        Выделяйте ячейки мышью, копируйте (Ctrl+C). Флажки слева выделяют строки (можно несколько —
-        затем «Открыть»/«Удалить»). Кнопка «Сортировка…» открывает многоуровневую сортировку как в
-        Excel. Клик по заголовку сортирует столбец, Ctrl+клик — добавляет столбец к сортировке.
-        Двойной клик по строке открывает сертификат. «Дата выдачи» вычисляется из даты «Эътибор дорад
-        аз».
+        Протяните мышью по ячейкам, чтобы выделить диапазон; тяните по номерам строк слева — чтобы
+        выделять строки. Ctrl+C — копировать выделение (вставляется в Excel). «Сортировка…» —
+        многоуровневая (предзаполняется из выделения). Клик по заголовку сортирует столбец, Ctrl+клик
+        — добавляет к сортировке. Двойной клик по ячейке — редактирование; по номеру строки — открыть
+        сертификат.
       </p>
 
       <SortDialog
         open={sortOpen}
-        columns={sortableColumns}
+        columns={SORT_COLUMNS}
         initial={initialSort}
         onApply={applySort}
         onClose={() => setSortOpen(false)}

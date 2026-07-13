@@ -364,14 +364,20 @@ body {
 .sort-grid-head,
 .sort-row {
   display: grid;
-  grid-template-columns: 2.4fr 1.4fr 1.6fr;
+  /* minmax(0, …) — треки не раздуваются длинными <option>, поэтому шапка и
+     строки совпадают по колонкам, а горизонтального скролла нет. */
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1.5fr) minmax(0, 1.6fr);
   gap: 8px;
 }
 .sort-grid-head {
   font-weight: 600;
   color: var(--muted);
-  padding: 0 8px 6px;
+  padding: 6px 8px;
   font-size: 13px;
+  border: 1px solid transparent; /* выровнять с рамкой строк */
+}
+.sort-grid-head > div {
+  min-width: 0;
 }
 .sort-row {
   align-items: center;
@@ -387,6 +393,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 .sort-prefix {
   font-size: 12px;
@@ -396,6 +403,7 @@ body {
 .sort-cell select {
   flex: 1;
   min-width: 0;
+  width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -415,10 +423,122 @@ body {
   background: #f8fafc;
 }
 
-/* Excel-подобная подсветка ячеек AG Grid */
-.ag-theme-quartz .ag-cell-focus:not(.ag-cell-range-selected) {
-  border: 1px solid #2563eb !important;
-  background: rgba(37, 99, 235, 0.06);
+/* ============================================================================
+   Excel-подобная таблица реестра (собственная реализация)
+   ============================================================================ */
+.xl-wrap {
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  position: relative;
+}
+.xl-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+.xl-table th,
+.xl-table td {
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 4px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+/* Шапка (закреплена сверху) */
+.xl-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef2f7;
+  font-weight: 600;
+  text-align: left;
+  vertical-align: bottom;
+  cursor: pointer;
+  border-bottom: 1px solid #cbd5e1;
+}
+.xl-table thead th.xl-head:hover {
+  background: #e2e8f0;
+}
+.xl-sort {
+  margin-left: 4px;
+  color: #2563eb;
+  font-size: 11px;
+}
+.xl-sort sup {
+  font-size: 8px;
+}
+/* Угол и номера строк (закреплены слева) */
+.xl-corner {
+  position: sticky;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  width: 46px;
+  min-width: 46px;
+  background: #e2e8f0;
+  border-right: 1px solid #cbd5e1;
+}
+.xl-rownum {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 46px;
+  min-width: 46px;
+  text-align: center;
+  color: #64748b;
+  font-weight: 500;
+  background: #f1f5f9;
+  border-right: 1px solid #cbd5e1;
+  cursor: pointer;
+}
+.xl-rownum:hover {
+  background: #e2e8f0;
+}
+.xl-rownum-sel {
+  background: #dbeafe;
+  color: #1e40af;
+}
+/* Ячейки данных */
+.xl-cell {
+  background: #fff;
+  cursor: cell;
+}
+.xl-cell.xl-readonly {
+  background: #fbfcfe;
+  color: #475569;
+}
+.xl-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.xl-cell.sel {
+  background: rgba(37, 99, 235, 0.12);
+}
+.xl-cell.active {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.xl-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  background: #fff;
+  color: #000;
+}
+.xl-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
 }
 
 @media print {
