@@ -355,7 +355,7 @@ export default function CertificateEditor() {
             key={`${formKey}-service_address`}
             value={cert.address ? `${cert.service_name}, ${cert.address}` : cert.service_name}
             onChange={setServiceAddress}
-            hint="наименование"
+            hint="наименование, адрес"
             flow
             abbr={abbr}
           />
