@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { toast } from "./Toast";
 import SortDialog, { SortColumn, SortLevel } from "./SortDialog";
-import { Certificate, REGISTRY_COLUMNS, issueDate } from "../lib/certificate";
+import { Certificate, REGISTRY_COLUMNS } from "../lib/certificate";
 import {
   listCertificates,
   updateCertificate,
@@ -30,17 +30,17 @@ interface GridColumn {
   colId: string;
   header: string;
   field?: keyof Certificate;
-  computed?: "issue_date";
+  value?: (c: Certificate) => string;
   editable: boolean;
   numeric: boolean;
   minWidth: number;
 }
 
 const COLUMNS: GridColumn[] = REGISTRY_COLUMNS.map((c) => ({
-  colId: c.computed === "issue_date" ? "issue_date" : (c.field as string),
+  colId: c.colId ?? (c.field as string),
   header: c.header,
   field: c.field,
-  computed: c.computed,
+  value: c.value,
   editable: !!c.editable,
   numeric: !!c.numeric,
   minWidth: c.minWidth ?? 100,
@@ -54,7 +54,7 @@ const SORT_COLUMNS: SortColumn[] = COLUMNS.map((c) => ({
 
 /** Отображаемое значение ячейки (строкой). */
 function cellText(row: Certificate, col: GridColumn): string {
-  if (col.computed === "issue_date") return issueDate(row);
+  if (col.value) return col.value(row);
   const v = col.field ? row[col.field] : "";
   return v == null ? "" : String(v);
 }

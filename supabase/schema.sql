@@ -30,6 +30,7 @@ create table if not exists public.certificates (
   signature          text,
 
   -- Дополнительные данные (реестр, не печатаются)
+  certificate_number text,
   application_number text,
   plan_number        text,
   inspector          text,

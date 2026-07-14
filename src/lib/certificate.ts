@@ -30,7 +30,8 @@ export interface Certificate {
   signature: string; // Подпись/имя в левой части блока подписи (бывшая линия «___»)
 
   // --- Дополнительные данные (в реестр, НЕ печатаются на бланке) ---
-  application_number: string; // № заявка
+  certificate_number: string; // № свидетельства (вводится в доп. данных → колонка реестра «№ свидетельства»)
+  application_number: string; // № заявка (устар.: теперь № заявки берётся из basis_date_number)
   plan_number: string; // № плана
   inspector: string; // Инспектор (ФИО)
   amount: number | null; // Сумма
@@ -83,6 +84,7 @@ export const DEFAULT_CERT: Certificate = {
   signatory: "Раҳмон И.Х.",
   signature: "",
 
+  certificate_number: "",
   application_number: "",
   plan_number: "",
   inspector: "",
@@ -110,6 +112,7 @@ export function emptyCertificate(): Certificate {
     special_notes: "",
     signatory: "Раҳмон И.Х.",
     signature: "",
+    certificate_number: "",
     application_number: "",
     plan_number: "",
     inspector: "",
@@ -119,11 +122,69 @@ export function emptyCertificate(): Certificate {
 
 /** Дополнительные данные (панель в редакторе) — попадают в реестр, не печатаются. */
 export const EXTRA_FIELDS: { key: keyof Certificate; label: string; numeric?: boolean }[] = [
-  { key: "application_number", label: "№ заявки" },
+  { key: "certificate_number", label: "№ свидетельства" },
   { key: "plan_number", label: "№ плана" },
   { key: "inspector", label: "Инспектор (ФИО)" },
   { key: "amount", label: "Сумма", numeric: true },
 ];
+
+// ============================================================================
+// Преобразования «сертификат → реестр». На бланке значения хранятся в полной
+// форме (так печатается официальный документ), а в реестр переносится
+// сокращённый/извлечённый вид.
+// ============================================================================
+
+/**
+ * Сокращения административно-территориальных терминов адреса (полная форма → короткая).
+ * Пример: «шаҳри Душанбе, ноҳияи Фирдавсӣ, кӯчаи Миралӣ 1» → «ш. Душанбе, н. Фирдавсӣ, к. Миралӣ 1».
+ */
+const ADDRESS_ABBR: [string, string][] = [
+  ["ҷумҳурии", "ҷ."],
+  ["вилояти", "в."],
+  ["шаҳри", "ш."],
+  ["ноҳияи", "н."],
+  ["ҷамоати", "ҷам."],
+  ["деҳаи", "д."],
+  ["маҳаллаи", "маҳ."],
+  ["кӯчаи", "к."],
+  ["хиёбони", "хиёб."],
+  ["гузаргоҳи", "гуз."],
+  ["хонаи", "х."],
+];
+
+/** Сократить адрес для реестра (заменяет административные термины короткими формами). */
+export function abbreviateAddress(s: string): string {
+  let out = s ?? "";
+  for (const [word, short] of ADDRESS_ABBR) {
+    // Слово целиком: в начале строки или после разделителя, далее пробел(ы).
+    // Флаг «u» включает Unicode-регистронезависимость (важно для кириллицы).
+    const re = new RegExp(`(^|[\\s,;(])${word}\\s+`, "giu");
+    out = out.replace(re, (_m, sep) => `${sep}${short} `);
+  }
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * Сократить ФИО предпринимателя для реестра.
+ * • Полное ФИО (3+ слова: Фамилия Имя Отчество …) → «Фамилия И.О.».
+ * • Только ФИ (2 слова) или одно слово — оставляем без изменений.
+ */
+export function shortenManagerName(s: string): string {
+  const parts = (s ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 3) return parts.join(" ");
+  const [last, ...rest] = parts;
+  const initials = rest.map((p) => p[0].toUpperCase() + ".").join("");
+  return `${last} ${initials}`;
+}
+
+/**
+ * Извлечь № заявки из поля «дата и № основания» (basis_date_number).
+ * Пример: «12.03.2026 №4012» → «4012». Если номер (после №) не найден — пусто.
+ */
+export function extractApplicationNumber(s: string): string {
+  const m = (s ?? "").match(/№\s*([0-9]+)/);
+  return m ? m[1] : "";
+}
 
 /**
  * Собрать строку «Дата выдачи» из даты «Эътибор дорад аз».
@@ -136,24 +197,35 @@ export function issueDate(c: Certificate): string {
 
 /**
  * Порядок и заголовки колонок реестра — один в один с рабочим Excel-файлом.
- * `field` — ключ записи; для «Дата выдачи» значение вычисляется (valueGetter).
+ * `field` — ключ записи (значение берётся и правится напрямую).
+ * `value` — вычисляемое отображаемое значение (переопределяет `field`); такие
+ *   колонки только для чтения, т.к. это производное от полей сертификата.
+ * `colId` — явный id для колонок без прямого поля (напр. «Дата выдачи»).
  */
-export const REGISTRY_COLUMNS: {
+export interface RegistryColumn {
   field?: keyof Certificate;
+  colId?: string;
   header: string;
-  computed?: "issue_date";
+  value?: (c: Certificate) => string;
   numeric?: boolean;
   editable?: boolean;
   minWidth?: number;
-}[] = [
-  { field: "cert_number", header: "№ свидетельства", editable: true, minWidth: 150 },
-  { field: "application_number", header: "№ заявка", editable: true, minWidth: 100 },
+}
+
+export const REGISTRY_COLUMNS: RegistryColumn[] = [
+  // № свидетельства теперь вводится в «Дополнительных данных» (certificate_number),
+  // а не берётся с бланка (cert_number — это серия готового бланка).
+  { field: "certificate_number", header: "№ свидетельства", editable: true, minWidth: 150 },
+  // № заявки извлекается из поля бланка «дата и № основания» (напр. «12.03.2026 №4012» → «4012»).
+  { colId: "application_number", header: "№ заявка", value: (c) => extractApplicationNumber(c.basis_date_number), editable: false, minWidth: 100 },
   { field: "service_name", header: "Наименование предприятий, организаций, частных лиц, получивших свидетел.", editable: true, minWidth: 240 },
-  { field: "address", header: "Адрес", editable: true, minWidth: 200 },
-  { field: "manager_name", header: "ФИО предприниматель", editable: true, minWidth: 160 },
+  // Адрес переносится в сокращённой форме (ш., н., к. …); правка — в сертификате.
+  { field: "address", header: "Адрес", value: (c) => abbreviateAddress(c.address), editable: false, minWidth: 200 },
+  // Полное ФИО сокращается до «Фамилия И.О.»; ФИ (2 слова) — без изменений.
+  { field: "manager_name", header: "ФИО предприниматель", value: (c) => shortenManagerName(c.manager_name), editable: false, minWidth: 160 },
   { field: "service_type", header: "Вид услуга", editable: true, minWidth: 140 },
   { field: "plan_number", header: "№ плана", editable: true, minWidth: 100 },
-  { header: "Дата выдачи", computed: "issue_date", editable: false, minWidth: 130 },
+  { colId: "issue_date", header: "Дата выдачи", value: issueDate, editable: false, minWidth: 130 },
   { field: "inspector", header: "Инспектор", editable: true, minWidth: 140 },
   { field: "amount", header: "Сумма", numeric: true, editable: true, minWidth: 110 },
 ];
