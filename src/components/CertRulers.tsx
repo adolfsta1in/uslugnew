@@ -161,6 +161,21 @@ export default function CertRulers({ margins, onChange, children }: Props) {
           </div>
         )}
       </div>
+
+      {/* Нижний уголок */}
+      <div className="ruler-corner" style={{ width: RULER, height: RULER }} />
+
+      {/* Нижняя горизонтальная линейка (зеркало верхней) */}
+      <div className="ruler ruler-h ruler-h-bottom" style={{ height: RULER, width: `${PAGE_W}mm` }}>
+        <div className="ruler-shade" style={{ left: 0, width: `${textLeft}mm` }} />
+        <div className="ruler-shade" style={{ left: `${textRight}mm`, right: 0 }} />
+        <div className="ruler-ticks ruler-ticks-h ruler-ticks-h-bottom" />
+        {hCm.map((c) => (
+          <span key={c} className="ruler-num ruler-num-bottom" style={{ left: `${c}cm` }}>
+            {c}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

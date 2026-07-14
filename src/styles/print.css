@@ -112,13 +112,45 @@
   text-indent: 8mm;
 }
 
+/* «Қайдҳои махсус» — без выравнивания по ширине, чтобы при переносе строки
+   слова не растягивались на всю ширину (обычный интервал между словами). */
+.cert-notes {
+  text-align: left;
+}
+
 /* Блок подписи внизу */
 .cert-sign {
   margin-top: 4mm;
 }
-.cert-sign-right {
+/* «Роҳбари мақомот» — центрируется прямо над правым столбцом (поле ФИО). */
+.cert-sign-heading {
+  width: 45mm;
+  margin-left: auto;
   text-align: center;
   margin-bottom: 1mm !important;
+}
+/* Строка подписи: Ҷ.М. + подпись держатся вместе слева, ФИО уходит вправо. */
+.cert-sign-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.cert-sign-stamp {
+  flex: 0 0 12mm;
+  text-align: left;
+}
+.cert-sign-sig {
+  flex: 0 0 40mm;
+  text-align: center;
+}
+.cert-sign-name {
+  flex: 0 0 45mm;
+  margin-left: auto; /* прижать ФИО к правому краю */
+  text-align: center;
+}
+.cert-sign-caps {
+  font-size: 8.5pt;
+  margin-top: -1mm;
 }
 
 /* ===== Редактируемое поле (обёртка над Lexical) ===== */
@@ -190,6 +222,16 @@
 }
 .field-multiline .field-editor {
   min-height: 3em;
+}
+/* Поле без переноса строк: длинный текст продолжается по горизонтали. */
+.field-nowrap {
+  white-space: nowrap;
+}
+.field-nowrap .field-editor,
+.field-nowrap .field-editor p {
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 /* Редактируемый постоянный текст шаблона (можно исправлять опечатки) */

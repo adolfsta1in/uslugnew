@@ -52,6 +52,23 @@ export default function CertificateEditor() {
     setDirty(true);
   }, []);
 
+  // Наименование и адрес вводятся в одном поле (без переноса строки). Первый
+  // символ «,» или «;» отделяет наименование от адреса — так они попадают в
+  // разные колонки реестра. На бланке печатается вся строка как есть.
+  const setServiceAddress = useCallback((text: string) => {
+    const idx = text.search(/[,;]/);
+    setCert((prev) =>
+      idx === -1
+        ? { ...prev, service_name: text, address: "" }
+        : {
+            ...prev,
+            service_name: text.slice(0, idx).trim(),
+            address: text.slice(idx + 1).trim(),
+          }
+    );
+    setDirty(true);
+  }, []);
+
   const loadRecord = useCallback(async (id: string) => {
     try {
       const rec = await getCertificate(id);
@@ -297,12 +314,20 @@ export default function CertificateEditor() {
           </span>
         </div>
 
-        {/* Основной текст */}
+        {/* Основной текст: наименование + адрес — одно поле без переноса строки.
+            Разделитель «,» или «;» отделяет наименование от адреса (для реестра). */}
         <div className="cpar" style={{ marginTop: "3mm" }}>
           {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
-          {f("service_name", { width: "70mm", hint: "наименование" })}
+          <EditableField
+            key={`${formKey}-service_address`}
+            value={cert.address ? `${cert.service_name}, ${cert.address}` : cert.service_name}
+            onChange={setServiceAddress}
+            hint="наименование, адрес"
+            width="70mm"
+            nowrap
+            abbr={abbr}
+          />
         </div>
-        {f("address", { block: true, center: true, hint: "адрес объекта" })}
         <div className="cert-caption">{ct("cap1", "(номгӯи муассисаи иҷрокунандаи хизматрасонӣ)")}</div>
 
         {f("manager_name", { block: true, center: true, hint: "ФИО руководителя" })}
@@ -352,7 +377,7 @@ export default function CertificateEditor() {
         </div>
         <div className="cert-caption">{ct("cap5", "(номгӯи мақомот оид ба шаҳодатномадиҳӣ)")}</div>
 
-        <div className="cpar">
+        <div className="cpar cert-notes">
           {ct("p7", "Қайдҳои махсус")}{" "}
           {f("special_notes", { width: "90mm", hint: "особые отметки" })}
         </div>
@@ -366,16 +391,21 @@ export default function CertificateEditor() {
 
         {/* Подпись */}
         <div className="cert-sign">
-          <div className="cert-sign-right">{ct("s1", "Роҳбари мақомот")}</div>
-          <div className="cert-validity-row" style={{ marginTop: "3mm" }}>
-            <span className="left">{ct("s2", "Ҷ.М.")}</span>
-            <span>{f("signature", { width: "45mm", center: true, hint: "имя / подпись" })}</span>
-            <span>{f("signatory", { width: "45mm", center: true, hint: "ФИО" })}</span>
+          {/* «Роҳбари мақомот» закреплено прямо над полем ФИО (правый столбец) */}
+          <div className="cert-sign-heading">{ct("s1", "Роҳбари мақомот")}</div>
+          <div className="cert-sign-row" style={{ marginTop: "3mm" }}>
+            <span className="cert-sign-stamp">{ct("s2", "Ҷ.М.")}</span>
+            <span className="cert-sign-sig">
+              {f("signature", { width: "40mm", center: true, hint: "имя / подпись" })}
+            </span>
+            <span className="cert-sign-name">
+              {f("signatory", { width: "45mm", center: true, hint: "ФИО" })}
+            </span>
           </div>
-          <div className="cert-validity-row" style={{ fontSize: "8.5pt", marginTop: "-1mm" }}>
-            <span className="left">&nbsp;</span>
-            <span>{ct("s4", "(имзо)")}</span>
-            <span style={{ width: "45mm", textAlign: "center" }}>{ct("s5", "(ному насаб)")}</span>
+          <div className="cert-sign-row cert-sign-caps">
+            <span className="cert-sign-stamp">&nbsp;</span>
+            <span className="cert-sign-sig">{ct("s4", "(имзо)")}</span>
+            <span className="cert-sign-name">{ct("s5", "(ному насаб)")}</span>
           </div>
         </div>
       </div>

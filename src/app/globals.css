@@ -73,7 +73,7 @@ body {
 .cert-rulers {
   display: grid;
   grid-template-columns: 26px 210mm;
-  grid-template-rows: 26px auto;
+  grid-template-rows: 26px auto 26px;
   width: max-content;
   margin: 0 auto;
 }
@@ -90,6 +90,11 @@ body {
 }
 .ruler-h {
   border-bottom: 1px solid #cbd5e1;
+}
+/* Нижняя горизонтальная линейка — зеркало верхней (штрихи и числа сверху). */
+.ruler-h-bottom {
+  border-bottom: none;
+  border-top: 1px solid #cbd5e1;
 }
 .ruler-v {
   border-right: 1px solid #cbd5e1;
@@ -127,6 +132,10 @@ body {
   background-repeat: no-repeat;
   pointer-events: none;
 }
+/* Штрихи нижней линейки прижаты к верхнему краю (ближе к листу). */
+.ruler-ticks-h-bottom {
+  background-position: top left;
+}
 .ruler-ticks-v {
   position: absolute;
   left: 0;
@@ -160,6 +169,11 @@ body {
   top: auto;
   left: 3px;
   transform: translateY(-50%);
+}
+/* Числа нижней линейки — у нижнего края. */
+.ruler-num-bottom {
+  top: auto;
+  bottom: 2px;
 }
 /* Маркеры полей */
 .ruler-handle-h {

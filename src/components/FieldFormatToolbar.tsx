@@ -16,7 +16,11 @@ import { setTemplateText } from "../lib/templateStore";
 // Для постоянного текста форматирование сохраняется (см. EditableText).
 // ============================================================================
 
-const SIZES = [8, 9, 10, 10.5, 11, 11.5, 12, 13, 14, 16, 18, 20, 24, 28];
+// Размер шрифта регулируется непрерывно (шаг 0.5 pt) в широком диапазоне —
+// чтобы было «много пунктов», а не короткий фиксированный список.
+const MIN_SIZE = 6;
+const MAX_SIZE = 96;
+const SIZE_STEP = 0.5;
 const DEFAULT_SIZE = "11.5pt";
 const BASE_COLOR = "#000000";
 
@@ -25,6 +29,12 @@ type Mode = "lexical" | "native";
 function parsePt(v: string): number {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 11.5;
+}
+
+/** Ограничить размер диапазоном и округлить до 0.5 pt. */
+function clampSize(n: number): number {
+  const rounded = Math.round(n * 2) / 2;
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, rounded));
 }
 
 interface Pos {
@@ -130,16 +140,13 @@ export default function FieldFormatToolbar() {
     if (newSize) setPos((p) => ({ ...p, size: newSize }));
   };
 
-  const stepSize = (dir: 1 | -1) => {
-    const cur = parsePt(pos.size);
-    let next: number;
-    if (dir > 0) {
-      next = SIZES.find((s) => s > cur) ?? SIZES[SIZES.length - 1];
-    } else {
-      const smaller = SIZES.filter((s) => s < cur);
-      next = smaller.length ? smaller[smaller.length - 1] : SIZES[0];
-    }
+  const setSize = (n: number) => {
+    const next = clampSize(n);
     apply({ "font-size": `${next}pt` }, `${next}pt`);
+  };
+
+  const stepSize = (dir: 1 | -1) => {
+    setSize(parsePt(pos.size) + dir * SIZE_STEP);
   };
 
   if (!pos.visible) return null;
