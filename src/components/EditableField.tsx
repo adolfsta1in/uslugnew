@@ -47,8 +47,9 @@ interface EditableFieldProps {
   block?: boolean;
   /** Без подчёркивания и подсветки (для предзаполненных полей, напр. № свидетельства). */
   plain?: boolean;
-  /** Запрет переноса строк: текст продолжается по горизонтали, не создавая новую строку. */
-  nowrap?: boolean;
+  /** «В поток»: поле ведёт себя как inline-текст — продолжается после постоянного
+   *  текста и переносится на всю ширину следующей строки (наименование + адрес). */
+  flow?: boolean;
   /** Список автозамен (сокращений), применяемых при вводе. */
   abbr?: AbbrPair[];
 }
@@ -162,7 +163,7 @@ export default function EditableField({
   center = false,
   block = false,
   plain = false,
-  nowrap = false,
+  flow = false,
   abbr,
 }: EditableFieldProps) {
   const initialConfig = {
@@ -183,7 +184,7 @@ export default function EditableField({
     multiline ? "field-multiline" : "",
     block ? "field-block" : "",
     plain ? "field-plain" : "",
-    nowrap ? "field-nowrap" : "",
+    flow ? "field-flow" : "",
   ]
     .filter(Boolean)
     .join(" ");

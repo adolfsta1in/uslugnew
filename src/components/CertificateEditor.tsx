@@ -6,7 +6,7 @@ import EditableField from "./EditableField";
 import EditableText from "./EditableText";
 import CertRulers, { Margins } from "./CertRulers";
 import FieldFormatToolbar from "./FieldFormatToolbar";
-import { resetTemplate } from "../lib/templateStore";
+import { resetTemplate, saveTemplateAsDefault } from "../lib/templateStore";
 import { toast } from "./Toast";
 import {
   Certificate,
@@ -25,9 +25,22 @@ import { getCachedAbbreviations, listAbbreviations } from "../lib/abbreviations"
 
 const DRAFT_KEY = "cert-draft-v1";
 const MARGINS_KEY = "cert-margins-v1";
+// Сохранённые пользователем «отступы по умолчанию» (кнопка «Сохранить как шаблон»).
+const MARGINS_DEFAULT_KEY = "cert-margins-default-v1";
 const RULERS_KEY = "cert-rulers-v1";
 // Значения по умолчанию совпадают с print.css (--cert-top/left/right).
 const DEFAULT_MARGINS: Margins = { top: 62, left: 18, right: 14 };
+
+/** Отступы по умолчанию: сохранённые пользователем или исходные из кода. */
+function loadDefaultMargins(): Margins {
+  try {
+    const raw = localStorage.getItem(MARGINS_DEFAULT_KEY);
+    if (raw) return { ...DEFAULT_MARGINS, ...(JSON.parse(raw) as Partial<Margins>) };
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_MARGINS;
+}
 
 export default function CertificateEditor() {
   const router = useRouter();
@@ -125,8 +138,10 @@ export default function CertificateEditor() {
   // батчится с setMargins, поэтому первое сохранение не затирает загруженное.
   useEffect(() => {
     try {
+      // Текущие отступы: последние применённые, иначе — сохранённые «по умолчанию».
       const m = localStorage.getItem(MARGINS_KEY);
-      if (m) setMargins((prev) => ({ ...prev, ...(JSON.parse(m) as Partial<Margins>) }));
+      const src = m ?? localStorage.getItem(MARGINS_DEFAULT_KEY);
+      if (src) setMargins((prev) => ({ ...prev, ...(JSON.parse(src) as Partial<Margins>) }));
       const r = localStorage.getItem(RULERS_KEY);
       if (r != null) setShowRulers(r === "1");
     } catch {
@@ -275,8 +290,24 @@ export default function CertificateEditor() {
   };
 
   const handleResetMargins = () => {
-    setMargins(DEFAULT_MARGINS);
-    toast("Отступы полей сброшены к стандартным", "info");
+    setMargins(loadDefaultMargins());
+    toast("Отступы полей сброшены к сохранённым по умолчанию", "info");
+  };
+
+  // Зафиксировать текущий вид бланка (отступы линейки + правки/пробелы в тексте)
+  // как значения по умолчанию — навсегда, для всех новых бланков и при сбросе.
+  const handleSaveDefaults = () => {
+    if (!window.confirm("Сохранить текущие позиции полей и текст как вид по умолчанию для всех новых бланков?")) {
+      return;
+    }
+    try {
+      localStorage.setItem(MARGINS_DEFAULT_KEY, JSON.stringify(margins));
+      localStorage.setItem(MARGINS_KEY, JSON.stringify(margins));
+    } catch {
+      /* ignore */
+    }
+    saveTemplateAsDefault();
+    toast("Текущий вид сохранён как шаблон по умолчанию", "success");
   };
 
   // CSS-переменные листа: отступы (поля) управляются линейками.
@@ -314,17 +345,18 @@ export default function CertificateEditor() {
           </span>
         </div>
 
-        {/* Основной текст: наименование + адрес — одно поле без переноса строки.
+        {/* Основной текст: наименование + адрес — одно поле «в поток». Постоянный
+            текст остаётся слитным и на месте (без выравнивания по ширине), а
+            наименование продолжается сразу за ним и переносится на вторую строку.
             Разделитель «,» или «;» отделяет наименование от адреса (для реестра). */}
-        <div className="cpar" style={{ marginTop: "3mm" }}>
+        <div className="cpar cert-nameaddr" style={{ marginTop: "3mm" }}>
           {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
           <EditableField
             key={`${formKey}-service_address`}
             value={cert.address ? `${cert.service_name}, ${cert.address}` : cert.service_name}
             onChange={setServiceAddress}
             hint="наименование, адрес"
-            width="70mm"
-            nowrap
+            flow
             abbr={abbr}
           />
         </div>
@@ -440,6 +472,9 @@ export default function CertificateEditor() {
         <button className="btn" onClick={handleClear}>🧹 Очистить форму</button>
         <button className="btn" onClick={handleLoadFromRegistry}>📂 Загрузить из реестра</button>
         <button className="btn" onClick={handleResetTemplate}>↩️ Сбросить текст шаблона</button>
+        <button className="btn btn-primary" onClick={handleSaveDefaults}>
+          📌 Сохранить как шаблон по умолчанию
+        </button>
         <button className="btn" onClick={() => setShowRulers((v) => !v)}>
           {showRulers ? "📏 Скрыть линейку" : "📏 Показать линейку"}
         </button>

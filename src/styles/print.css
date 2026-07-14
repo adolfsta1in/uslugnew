@@ -24,6 +24,9 @@
 
   --cert-font: "Times New Roman", "PT Serif", serif;
   --cert-size: 11.5pt;
+  /* Межстрочный интервал. Немного уменьшен (~0.5 мм на строку), чтобы текст
+     гарантированно помещался на бланк при печати. */
+  --cert-line: 1.3;
 }
 
 /* Лист A4 */
@@ -69,7 +72,7 @@
   transform: translate(var(--cal-x), var(--cal-y));
   font-family: var(--cert-font);
   font-size: var(--cert-size);
-  line-height: 1.42;
+  line-height: var(--cert-line);
   color: #000;
   text-align: justify;
 }
@@ -116,6 +119,14 @@
    слова не растягивались на всю ширину (обычный интервал между словами). */
 .cert-notes {
   text-align: left;
+}
+
+/* Абзац «...хизматрасонии [наименование, адрес]» — без выравнивания по ширине:
+   постоянный текст остаётся слитным и на месте, даже если наименование длинное
+   и переносится на вторую строку. Резервируем высоту под две строки. */
+.cert-nameaddr {
+  text-align: left;
+  min-height: calc(2 * var(--cert-size) * var(--cert-line));
 }
 
 /* Блок подписи внизу */
@@ -223,15 +234,21 @@
 .field-multiline .field-editor {
   min-height: 3em;
 }
-/* Поле без переноса строк: длинный текст продолжается по горизонтали. */
-.field-nowrap {
-  white-space: nowrap;
+/* Поле «в поток»: текст продолжается сразу после постоянного текста и
+   переносится на всю ширину следующей строки (наименование + адрес).
+   Подчёркивание рисуется под каждой строкой (как две линии бланка). */
+.field-flow,
+.field-flow .field-editor,
+.field-flow .field-editor p {
+  display: inline;
 }
-.field-nowrap .field-editor,
-.field-nowrap .field-editor p {
-  white-space: pre;
-  word-break: normal;
-  overflow-wrap: normal;
+.field-flow {
+  min-width: 0;
+  padding: 0 2px;
+}
+.field-flow .field-editor {
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* Редактируемый постоянный текст шаблона (можно исправлять опечатки) */
