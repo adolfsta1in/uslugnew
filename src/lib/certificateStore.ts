@@ -43,14 +43,31 @@ function pickWritable(c: Partial<Certificate>): Partial<Certificate> {
   return out;
 }
 
-/** Загрузить все сертификаты (новые сверху). */
+/**
+ * Загрузить все сертификаты (новые сверху).
+ * Supabase/PostgREST отдаёт максимум 1000 строк за запрос, поэтому выбираем
+ * данные постранично (range) и склеиваем, пока не заберём все записи.
+ */
 export async function listCertificates(): Promise<Certificate[]> {
-  const { data, error } = await getSupabase()
-    .from(TABLE)
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Certificate[];
+  const PAGE = 1000;
+  const all: Certificate[] = [];
+  // Вторичный ключ `id` обязателен: при массовом импорте у строк одинаковый
+  // created_at, и без уникального тай-брейкера постраничная выборка (range)
+  // становится недетерминированной (пропуски/повторы между страницами).
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await getSupabase()
+      .from(TABLE)
+      .select("*")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as Certificate[];
+    all.push(...rows);
+    if (rows.length < PAGE) break; // последняя страница — дальше данных нет
+    if (from > 1_000_000) break; // предохранитель от бесконечного цикла
+  }
+  return all;
 }
 
 /** Загрузить один сертификат по id. */
