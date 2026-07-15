@@ -59,6 +59,23 @@ function cellText(row: Certificate, col: GridColumn): string {
   return v == null ? "" : String(v);
 }
 
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function excelCell(value: string, numeric: boolean): string {
+  const normalized = value.trim().replace(/\s+/g, "");
+  const number = Number(normalized);
+  const type = numeric && value.trim() !== "" && Number.isFinite(number) ? "Number" : "String";
+  const data = type === "Number" ? String(number) : xmlEscape(value);
+  return `<Cell><Data ss:Type="${type}">${data}</Data></Cell>`;
+}
+
 interface Cell {
   r: number;
   c: number;
@@ -342,21 +359,42 @@ export default function RegistryGrid() {
     }
   };
 
-  // --- Экспорт CSV ---
+  // --- Экспорт Excel ---
   const handleExport = () => {
-    const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-    const header = COLUMNS.map((c) => esc(c.header)).join(",");
+    const header = `<Row ss:StyleID="header">${COLUMNS.map((c) => excelCell(c.header, false)).join("")}</Row>`;
     const body = rows
-      .map((row) => COLUMNS.map((c) => esc(cellText(row, c))).join(","))
-      .join("\n");
-    const csv = "﻿" + header + "\n" + body; // BOM для Excel
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      .map(
+        (row) =>
+          `<Row>${COLUMNS.map((c) => excelCell(cellText(row, c), c.numeric)).join("")}</Row>`
+      )
+      .join("");
+    const widths = COLUMNS.map(
+      (c) => `<Column ss:Width="${Math.max(80, Math.min(240, c.minWidth))}"/>`
+    ).join("");
+    const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1"/>
+   <Interior ss:Color="#E8EEF7" ss:Pattern="Solid"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Реестр">
+  <Table>${widths}${header}${body}</Table>
+ </Worksheet>
+</Workbook>`;
+    const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "reestr-sertifikatov.csv";
+    a.download = "reestr-sertifikatov.xls";
     a.click();
     URL.revokeObjectURL(url);
+    toast(`Экспортировано строк: ${rows.length}`, "success");
   };
 
   // --- Сортировка через диалог ---
@@ -433,7 +471,7 @@ export default function RegistryGrid() {
         >
           🗑️ Удалить{selectedRows.length > 1 ? ` (${selectedRows.length})` : ""}
         </button>
-        <button className="btn" onClick={handleExport}>⬇️ Экспорт CSV</button>
+        <button className="btn" onClick={handleExport}>⬇️ Экспорт Excel</button>
         <button className="btn" onClick={load}>🔄 Обновить</button>
         <button className="btn" onClick={handleCheckSupabase}>🔌 Проверить Supabase</button>
         <div style={{ marginLeft: "auto", fontSize: 14, color: "var(--muted)" }}>
