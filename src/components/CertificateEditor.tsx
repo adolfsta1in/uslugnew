@@ -6,7 +6,9 @@ import EditableField from "./EditableField";
 import EditableText from "./EditableText";
 import CertRulers, { Margins } from "./CertRulers";
 import FieldFormatToolbar from "./FieldFormatToolbar";
+import TemplatesDialog from "./TemplatesDialog";
 import { resetTemplate, saveTemplateAsDefault } from "../lib/templateStore";
+import { NamedTemplate, saveTemplate, findByName } from "../lib/namedTemplateStore";
 import { toast } from "./Toast";
 import {
   Certificate,
@@ -56,29 +58,13 @@ export default function CertificateEditor() {
   const [showRulers, setShowRulers] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const [abbr, setAbbr] = useState<AbbrPair[]>([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const didInit = useRef(false);
 
   // Поле-хелпер: значение берётся один раз при монтировании (Lexical неуправляем),
   // поэтому при загрузке/очистке меняем formKey, чтобы поля пересоздались.
   const setField = useCallback((key: keyof Certificate, value: string) => {
     setCert((prev) => ({ ...prev, [key]: value }));
-    setDirty(true);
-  }, []);
-
-  // Наименование и адрес вводятся в одном поле (без переноса строки). Первый
-  // символ «,» или «;» отделяет наименование от адреса — так они попадают в
-  // разные колонки реестра. На бланке печатается вся строка как есть.
-  const setServiceAddress = useCallback((text: string) => {
-    const idx = text.search(/[,;]/);
-    setCert((prev) =>
-      idx === -1
-        ? { ...prev, service_name: text, address: "" }
-        : {
-            ...prev,
-            service_name: text.slice(0, idx).trim(),
-            address: text.slice(idx + 1).trim(),
-          }
-    );
     setDirty(true);
   }, []);
 
@@ -310,6 +296,43 @@ export default function CertificateEditor() {
     toast("Текущий вид сохранён как шаблон по умолчанию", "success");
   };
 
+  // Сохранить текущие значения полей бланка как именованный шаблон (в Supabase).
+  const handleSaveTemplate = async () => {
+    if (!isSupabaseConfigured) {
+      toast("Supabase не настроен — задайте переменные окружения (.env.local)", "error");
+      return;
+    }
+    const name = window.prompt("Название шаблона:", "")?.trim();
+    if (!name) return;
+    try {
+      const existing = await findByName(name);
+      if (existing && !window.confirm(`Шаблон «${name}» уже существует. Перезаписать?`)) {
+        return;
+      }
+      await saveTemplate(name, cert);
+      toast(`Шаблон «${name}» сохранён`, "success");
+    } catch (e) {
+      toast("Ошибка сохранения шаблона: " + (e as Error).message, "error");
+    }
+  };
+
+  // Подставить сохранённый шаблон в форму (перезаписывает текущие поля).
+  const handleLoadTemplate = (tpl: NamedTemplate) => {
+    if (dirty && !window.confirm("Подставить шаблон? Несохранённые изменения в форме будут потеряны.")) {
+      return;
+    }
+    // Как новая запись: id из шаблона не переносим, чтобы «Сохранить в реестр»
+    // создавало новую строку, а не перезаписывало существующую.
+    const { id: _id, created_at: _c, updated_at: _u, ...rest } = tpl.cert;
+    setCert({ ...emptyCertificate(), ...rest });
+    setRecordId(null);
+    setFormKey((k) => k + 1);
+    setDirty(true);
+    setTemplatesOpen(false);
+    router.replace("/new");
+    toast(`Шаблон «${tpl.name}» подставлен`, "success");
+  };
+
   // CSS-переменные листа: отступы (поля) управляются линейками.
   const pageStyle = {
     ["--cert-top" as string]: `${margins.top}mm`,
@@ -345,18 +368,30 @@ export default function CertificateEditor() {
           </span>
         </div>
 
-        {/* Основной текст: наименование + адрес — одно поле «в поток». Постоянный
-            текст остаётся слитным и на месте (без выравнивания по ширине), а
-            наименование продолжается сразу за ним и переносится на вторую строку.
-            Разделитель «,» или «;» отделяет наименование от адреса (для реестра). */}
-        <div className="cpar cert-nameaddr" style={{ marginTop: "3mm" }}>
-          {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
+        {/* Наименование и адрес — ДВА независимых поля, каждое заполняется
+            отдельно. Наименование «в поток» продолжается сразу за постоянным
+            текстом (1-я строка, линия до конца строки). Адрес — блочное поле
+            ниже с «растущими линиями»: по мере переноса текста появляются новые
+            линии. Обе части подсвечены голубым свечением. */}
+        <div className="cert-nameaddr" style={{ marginTop: "3mm" }}>
+          <div className="cpar cert-name-row">
+            {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
+            <EditableField
+              key={`${formKey}-service_name`}
+              value={cert.service_name}
+              onChange={(t) => setField("service_name", t)}
+              hint="наименование"
+              flow
+              growline
+              abbr={abbr}
+            />
+          </div>
           <EditableField
-            key={`${formKey}-service_address`}
-            value={cert.address ? `${cert.service_name}, ${cert.address}` : cert.service_name}
-            onChange={setServiceAddress}
-            hint="наименование, адрес"
-            flow
+            key={`${formKey}-address`}
+            value={cert.address}
+            onChange={(t) => setField("address", t)}
+            hint="адрес"
+            growline
             abbr={abbr}
           />
         </div>
@@ -449,6 +484,13 @@ export default function CertificateEditor() {
       {/* Плавающая панель форматирования выделенного текста поля */}
       <FieldFormatToolbar />
 
+      {/* Окно поиска и подстановки сохранённых шаблонов */}
+      <TemplatesDialog
+        open={templatesOpen}
+        onLoad={handleLoadTemplate}
+        onClose={() => setTemplatesOpen(false)}
+      />
+
       {/* Панель действий */}
       <div
         className="editor-toolbar no-print"
@@ -470,6 +512,8 @@ export default function CertificateEditor() {
         </button>
         <button className="btn" onClick={handlePrint}>🖨️ Печать сертификата</button>
         <button className="btn" onClick={handleClear}>🧹 Очистить форму</button>
+        <button className="btn" onClick={handleSaveTemplate}>💾 Сохранить шаблон</button>
+        <button className="btn" onClick={() => setTemplatesOpen(true)}>📋 Шаблоны</button>
         <button className="btn" onClick={handleLoadFromRegistry}>📂 Загрузить из реестра</button>
         <button className="btn" onClick={handleResetTemplate}>↩️ Сбросить текст шаблона</button>
         <button className="btn btn-primary" onClick={handleSaveDefaults}>

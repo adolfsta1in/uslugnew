@@ -27,6 +27,16 @@
   /* Межстрочный интервал. Немного уменьшен (~0.5 мм на строку), чтобы текст
      гарантированно помещался на бланк при печати. */
   --cert-line: 1.3;
+
+  /* «Растущие линии» поля адреса: линия под каждой строкой текста. Период
+     повтора = высота строки, поэтому при переносе снизу появляется новая линия. */
+  --growline-underlines: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--cert-size) * var(--cert-line) - 0.2mm),
+    #000 calc(var(--cert-size) * var(--cert-line) - 0.2mm),
+    #000 calc(var(--cert-size) * var(--cert-line))
+  );
 }
 
 /* Лист A4 */
@@ -121,28 +131,62 @@
   text-align: left;
 }
 
-/* Абзац «...хизматрасонии [наименование, адрес]» — без выравнивания по ширине:
-   постоянный текст остаётся слитным и на месте, даже если наименование длинное
-   и переносится на вторую строку. Резервируем высоту под две строки.
-
-   Две ФИКСИРОВАННЫЕ линии (как на бумажном бланке) рисуются фоном контейнера:
-     • 1-я строка — линия наименования: от конца постоянного текста до правого края;
-     • 2-я строка — линия адреса: на всю ширину.
-   Текст поля «в поток» ложится ПОВЕРХ линий и не сдвигает их (как поле ФИО). */
+/* Блок «...хизматрасонии [наименование]» + [адрес].
+   Наименование и адрес — ДВА независимых поля (заполняются раздельно).
+   Линии рисуются фоном (как на бумажном бланке) и НЕ сдвигаются при наборе. */
 .cert-nameaddr {
   text-align: left;
-  min-height: calc(2 * var(--cert-size) * var(--cert-line));
-  /* Ширина постоянного текста «…хизматрасонии» — с этого места на 1-й строке
-     начинается видимая линия наименования. Подгоняется вручную под шрифт. */
-  --nameaddr-gap: 82mm;
-  background-image: linear-gradient(#000, #000), linear-gradient(#000, #000);
-  background-repeat: no-repeat, no-repeat;
-  background-size:
-    calc(100% - var(--nameaddr-gap)) 0.2mm,
-    100% 0.2mm;
-  background-position:
-    right calc(1 * var(--cert-size) * var(--cert-line) - 0.2mm),
-    left calc(2 * var(--cert-size) * var(--cert-line) - 0.2mm);
+}
+
+/* 1-я строка: постоянный текст + поле наименования.
+   Flex-раскладка: постоянный текст занимает свою ширину, поле наименования
+   растягивается на весь остаток строки до правого края (линия «до конца
+   строки»). Собственное подчёркивание поля фиксировано и не сдвигается. */
+.cert-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 0 !important;
+}
+.cert-name-row .const-text {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.cert-name-row .field-flow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Поле адреса: блочное, «растущие линии». Под каждой строкой текста —
+   линия; при переносе текста снизу автоматически появляется новая линия. */
+.field-growline {
+  display: block;
+  width: 100%;
+  border-bottom: none;
+  min-height: calc(var(--cert-size) * var(--cert-line));
+  background-image: var(--growline-underlines);
+}
+.field-growline .field-editor,
+.field-growline .field-editor p {
+  line-height: var(--cert-line); /* высота строки = период линий */
+  white-space: normal;
+  word-break: break-word;
+}
+.field-growline .field-placeholder {
+  line-height: var(--cert-line);
+}
+
+/* Голубое свечение полей наименования и адреса (только на экране). */
+.cert-name-row .field-flow,
+.field-growline {
+  background-color: rgba(37, 99, 235, 0.06);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+  border-radius: 2px;
+}
+.cert-name-row .field-flow:focus-within,
+.field-growline:focus-within {
+  background-color: rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 6px 1px rgba(37, 99, 235, 0.5);
 }
 
 /* Блок подписи внизу */
@@ -250,27 +294,16 @@
 .field-multiline .field-editor {
   min-height: 3em;
 }
-/* Поле «в поток»: текст продолжается сразу после постоянного текста и
-   переносится на всю ширину следующей строки (наименование + адрес).
-   Подчёркивание рисуется под каждой строкой (как две линии бланка). */
-.field-flow,
-.field-flow .field-editor,
-.field-flow .field-editor p {
-  display: inline;
-}
+/* Поле наименования: flex-элемент, растягивается на остаток строки (см.
+   .cert-name-row). Собственное подчёркивание (border-bottom из .field)
+   фиксировано на всю ширину поля и не сдвигается при наборе. Длинный текст
+   переносится ВНУТРИ поля. */
 .field-flow {
   min-width: 0;
-  padding: 0 2px;
-  /* Без собственного подчёркивания/подсветки: линии рисует контейнер
-     .cert-nameaddr, поэтому при наборе текста они не сдвигаются. */
-  border-bottom: none;
-  background: transparent;
+  padding: 0 2px 0.3mm;
 }
-.field-flow:focus-within {
-  border-bottom: none;
-  background: transparent;
-}
-.field-flow .field-editor {
+.field-flow .field-editor,
+.field-flow .field-editor p {
   white-space: normal;
   word-break: break-word;
 }
@@ -332,10 +365,19 @@
   .field-plain {
     border-bottom: none !important;
   }
-  /* Поле «в поток» печатается без собственной линии — линии рисует контейнер */
+  /* Поле наименования: свечение убираем, подчёркивание (border-bottom из .field)
+     печатается чёрной линией на всю ширину поля */
   .field-flow {
+    box-shadow: none !important;
+    background-color: transparent !important;
+  }
+  /* Поле адреса: убираем свечение, но линии (background-image) печатаются.
+     Базовое правило .field выше сбрасывает background — восстанавливаем линии. */
+  .field-growline {
+    box-shadow: none !important;
+    background-color: transparent !important;
+    background-image: var(--growline-underlines) !important;
     border-bottom: none !important;
-    background: transparent !important;
   }
   /* Постоянный текст печатается без подсветки */
   .const-text {

@@ -50,6 +50,9 @@ interface EditableFieldProps {
   /** «В поток»: поле ведёт себя как inline-текст — продолжается после постоянного
    *  текста и переносится на всю ширину следующей строки (наименование + адрес). */
   flow?: boolean;
+  /** «Растущие линии»: блочное поле на всю ширину; под каждой строкой рисуется
+   *  линия, и по мере переноса текста снизу появляются новые линии (адрес). */
+  growline?: boolean;
   /** Список автозамен (сокращений), применяемых при вводе. */
   abbr?: AbbrPair[];
 }
@@ -164,6 +167,7 @@ export default function EditableField({
   block = false,
   plain = false,
   flow = false,
+  growline = false,
   abbr,
 }: EditableFieldProps) {
   const initialConfig = {
@@ -185,6 +189,7 @@ export default function EditableField({
     block ? "field-block" : "",
     plain ? "field-plain" : "",
     flow ? "field-flow" : "",
+    growline ? "field-growline" : "",
   ]
     .filter(Boolean)
     .join(" ");
