@@ -411,7 +411,7 @@ export default function CertificateEditor() {
 
         <div className="cpar cert-notes">
           {ct("p7", "Қайдҳои махсус")}{" "}
-          {f("special_notes", { width: "90mm", hint: "особые отметки" })}
+          {f("special_notes", { width: "55mm", hint: "особые отметки" })}
         </div>
 
         <div className="cert-indent cpar" style={{ marginTop: "1mm" }}>
