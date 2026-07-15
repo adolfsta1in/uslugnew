@@ -217,7 +217,7 @@ export const REGISTRY_COLUMNS: RegistryColumn[] = [
   // а не берётся с бланка (cert_number — это серия готового бланка).
   { field: "certificate_number", header: "№ свидетельства", editable: true, minWidth: 150 },
   // № заявки извлекается из поля бланка «дата и № основания» (напр. «12.03.2026 №4012» → «4012»).
-  { colId: "application_number", header: "№ заявка", value: (c) => extractApplicationNumber(c.basis_date_number), editable: false, minWidth: 100 },
+  { colId: "application_number", header: "№ заявка", value: (c) => extractApplicationNumber(c.basis_date_number), numeric: true, editable: false, minWidth: 100 },
   { field: "service_name", header: "Наименование предприятий, организаций, частных лиц, получивших свидетел.", editable: true, minWidth: 240 },
   // Адрес переносится в сокращённой форме (ш., н., к. …); правка — в сертификате.
   { field: "address", header: "Адрес", value: (c) => abbreviateAddress(c.address), editable: false, minWidth: 200 },

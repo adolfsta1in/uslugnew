@@ -145,9 +145,13 @@ export default function RegistryGrid() {
         const dir = lvl.dir === "asc" ? 1 : -1;
         let cmp = 0;
         if (col.numeric) {
-          const av = col.field ? Number(a[col.field]) || 0 : 0;
-          const bv = col.field ? Number(b[col.field]) || 0 : 0;
-          cmp = av - bv;
+          // Через cellText — работает и для вычисляемых колонок (напр. «№ заявка»,
+          // где значение берётся из basis_date_number, а не из отдельного поля).
+          const num = (row: Certificate) => {
+            const n = Number(cellText(row, col).replace(/\s+/g, ""));
+            return Number.isFinite(n) ? n : 0;
+          };
+          cmp = num(a) - num(b);
         } else {
           cmp = cellText(a, col).localeCompare(cellText(b, col), "ru");
         }
