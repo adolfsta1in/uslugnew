@@ -68,6 +68,23 @@ export default function CertificateEditor() {
     setDirty(true);
   }, []);
 
+  // Наименование и адрес — ОДНО поле (две строки). Первый символ «,» (или «;»)
+  // делит ввод: до него — наименование, после — адрес. Так программа понимает,
+  // что есть что, и раскладывает по разным колонкам реестра.
+  const setServiceAddress = useCallback((text: string) => {
+    const idx = text.search(/[,;]/);
+    setCert((prev) =>
+      idx === -1
+        ? { ...prev, service_name: text, address: "" }
+        : {
+            ...prev,
+            service_name: text.slice(0, idx).trim(),
+            address: text.slice(idx + 1).trim(),
+          }
+    );
+    setDirty(true);
+  }, []);
+
   const loadRecord = useCallback(async (id: string) => {
     try {
       const rec = await getCertificate(id);
@@ -368,30 +385,18 @@ export default function CertificateEditor() {
           </span>
         </div>
 
-        {/* Наименование и адрес — ДВА независимых поля, каждое заполняется
-            отдельно. Наименование «в поток» продолжается сразу за постоянным
-            текстом (1-я строка, линия до конца строки). Адрес — блочное поле
-            ниже с «растущими линиями»: по мере переноса текста появляются новые
-            линии. Обе части подсвечены голубым свечением. */}
-        <div className="cert-nameaddr" style={{ marginTop: "3mm" }}>
-          <div className="cpar cert-name-row">
-            {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
-            <EditableField
-              key={`${formKey}-service_name`}
-              value={cert.service_name}
-              onChange={(t) => setField("service_name", t)}
-              hint="наименование"
-              flow
-              growline
-              abbr={abbr}
-            />
-          </div>
+        {/* Наименование + адрес — ОДНО поле «в поток» на две строки. Текст
+            продолжается сразу за постоянным текстом «…хизматрасонии» и переносится
+            на вторую строку. Разделитель «,» делит наименование и адрес (для
+            реестра). Под обеими строками — фиксированные линии (фон контейнера). */}
+        <div className="cpar cert-nameaddr" style={{ marginTop: "3mm" }}>
+          {ct("p1", "Шаҳодатномаи мазкур тасдиқ менамояд, ки хизматрасонии")}{" "}
           <EditableField
-            key={`${formKey}-address`}
-            value={cert.address}
-            onChange={(t) => setField("address", t)}
-            hint="адрес"
-            growline
+            key={`${formKey}-service_address`}
+            value={cert.address ? `${cert.service_name}, ${cert.address}` : cert.service_name}
+            onChange={setServiceAddress}
+            hint="наименование, адрес"
+            flow
             abbr={abbr}
           />
         </div>
