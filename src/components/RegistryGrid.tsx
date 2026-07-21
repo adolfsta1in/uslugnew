@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { toast } from "./Toast";
@@ -9,7 +9,7 @@ import { Certificate, REGISTRY_COLUMNS } from "../lib/certificate";
 import {
   listCertificates,
   updateCertificate,
-  deleteCertificate,
+  deleteCertificates,
 } from "../lib/certificateStore";
 import { isSupabaseConfigured, testSupabaseConnection } from "../lib/supabaseClient";
 
@@ -51,6 +51,16 @@ const SORT_COLUMNS: SortColumn[] = COLUMNS.map((c) => ({
   header: c.header,
   numeric: c.numeric,
 }));
+const COLUMN_INDEX_BY_ID = new Map(COLUMNS.map((c, index) => [c.colId, index]));
+const ROW_HEIGHT = 30;
+const VIRTUAL_OVERSCAN = 10;
+
+interface IndexedRow {
+  row: Certificate;
+  texts: string[];
+  lowerTexts: string[];
+  searchText: string;
+}
 
 /** Отображаемое значение ячейки (строкой). */
 function cellText(row: Certificate, col: GridColumn): string {
@@ -110,6 +120,10 @@ export default function RegistryGrid() {
 
   const draggingRef = useRef(false);
   const dragModeRef = useRef<"cell" | "row" | null>(null);
+  const loadSeqRef = useRef(0);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0 });
 
   const load = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -117,20 +131,58 @@ export default function RegistryGrid() {
       toast("Supabase не настроен — задайте переменные окружения (.env.local)", "error");
       return;
     }
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const rows = await listCertificates();
-      setRowData(rows);
+      let receivedAnyPage = false;
+      const rows = await listCertificates((page) => {
+        if (seq !== loadSeqRef.current) return;
+        setRowData((prev) => (receivedAnyPage ? [...prev, ...page] : page));
+        receivedAnyPage = true;
+        setLoading(false);
+      });
+      if (seq === loadSeqRef.current) setRowData(rows);
     } catch (e) {
       toast("Ошибка загрузки реестра: " + (e as Error).message, "error");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const updateViewport = () => {
+      setViewport({ scrollTop: el.scrollTop, height: el.clientHeight });
+    };
+
+    updateViewport();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateViewport);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current != null) cancelAnimationFrame(scrollFrameRef.current);
+    };
+  }, []);
+
+  const onGridScroll = () => {
+    if (scrollFrameRef.current != null) return;
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const el = wrapRef.current;
+      if (el) setViewport({ scrollTop: el.scrollTop, height: el.clientHeight });
+    });
+  };
 
   // Завершение протягивания в любом месте окна.
   useEffect(() => {
@@ -146,6 +198,8 @@ export default function RegistryGrid() {
     () => Object.values(columnFilters).filter((v) => v.trim() !== "").length,
     [columnFilters]
   );
+  const deferredQuick = useDeferredValue(quick);
+  const deferredColumnFilters = useDeferredValue(columnFilters);
 
   const setColumnFilter = (colId: string, value: string) => {
     setColumnFilters((prev) => {
@@ -163,56 +217,86 @@ export default function RegistryGrid() {
     toast("Фильтры по колонкам сброшены", "info");
   };
 
+  const indexedRows = useMemo<IndexedRow[]>(
+    () =>
+      rowData.map((row) => {
+        const texts = COLUMNS.map((col) => cellText(row, col));
+        const lowerTexts = texts.map((text) => text.toLowerCase());
+        return { row, texts, lowerTexts, searchText: lowerTexts.join("\n") };
+      }),
+    [rowData]
+  );
+
   // Фильтрация по общей строке поиска и по отдельным колонкам.
   const filtered = useMemo(() => {
-    const q = quick.trim().toLowerCase();
-    const filters = Object.entries(columnFilters)
-      .map(([colId, value]) => [colId, value.trim().toLowerCase()] as const)
-      .filter(([, value]) => value !== "");
-
-    if (!q && filters.length === 0) return rowData;
-
-    const colMap = new Map(COLUMNS.map((col) => [col.colId, col]));
-    return rowData.filter((row) => {
-      const matchesQuick =
-        !q || COLUMNS.some((col) => cellText(row, col).toLowerCase().includes(q));
-      if (!matchesQuick) return false;
-
-      return filters.every(([colId, value]) => {
-        const col = colMap.get(colId);
-        return col ? cellText(row, col).toLowerCase().includes(value) : true;
-      });
+    const q = deferredQuick.trim().toLowerCase();
+    const filters = Object.entries(deferredColumnFilters).flatMap(([colId, value]) => {
+      const text = value.trim().toLowerCase();
+      const index = COLUMN_INDEX_BY_ID.get(colId);
+      return text && index !== undefined ? [{ index, text }] : [];
     });
-  }, [rowData, quick, columnFilters]);
+
+    if (!q && filters.length === 0) return indexedRows;
+
+    return indexedRows.filter((row) => {
+      if (q && !row.searchText.includes(q)) return false;
+      return filters.every((filter) => row.lowerTexts[filter.index].includes(filter.text));
+    });
+  }, [indexedRows, deferredQuick, deferredColumnFilters]);
 
   // Сортировка по модели (многоуровневая).
   const rows = useMemo(() => {
-    if (sortModel.length === 0) return filtered;
-    const colMap = new Map(COLUMNS.map((c) => [c.colId, c]));
+    if (sortModel.length === 0) return filtered.map((r) => r.row);
+    const levels: Array<SortLevel & { index: number; numeric: boolean }> = [];
+    for (const lvl of sortModel) {
+      const index = COLUMN_INDEX_BY_ID.get(lvl.colId);
+      const col = index === undefined ? undefined : COLUMNS[index];
+      if (col && index !== undefined) levels.push({ ...lvl, index, numeric: col.numeric });
+    }
+    if (levels.length === 0) return filtered.map((r) => r.row);
+
     const data = [...filtered];
     data.sort((a, b) => {
-      for (const lvl of sortModel) {
-        const col = colMap.get(lvl.colId);
-        if (!col) continue;
+      for (const lvl of levels) {
         const dir = lvl.dir === "asc" ? 1 : -1;
         let cmp = 0;
-        if (col.numeric) {
-          // Через cellText — работает и для вычисляемых колонок (напр. «№ заявка»,
-          // где значение берётся из basis_date_number, а не из отдельного поля).
-          const num = (row: Certificate) => {
-            const n = Number(cellText(row, col).replace(/\s+/g, ""));
+        if (lvl.numeric) {
+          // Берем заранее подготовленный текст, включая вычисляемые колонки.
+          const num = (row: IndexedRow) => {
+            const n = Number(row.texts[lvl.index].replace(/\s+/g, ""));
             return Number.isFinite(n) ? n : 0;
           };
           cmp = num(a) - num(b);
         } else {
-          cmp = cellText(a, col).localeCompare(cellText(b, col), "ru");
+          cmp = a.texts[lvl.index].localeCompare(b.texts[lvl.index], "ru");
         }
         if (cmp !== 0) return dir * cmp;
       }
       return 0;
     });
-    return data;
+    return data.map((r) => r.row);
   }, [filtered, sortModel]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    setViewport((prev) => ({ ...prev, scrollTop: 0 }));
+  }, [deferredQuick, deferredColumnFilters, sortModel]);
+
+  const virtualRows = useMemo(() => {
+    const viewportHeight = viewport.height || 600;
+    const startIndex = Math.max(0, Math.floor(viewport.scrollTop / ROW_HEIGHT) - VIRTUAL_OVERSCAN);
+    const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + VIRTUAL_OVERSCAN * 2;
+    const endIndex = Math.min(rows.length, startIndex + visibleCount);
+    return {
+      startIndex,
+      endIndex,
+      topPadding: startIndex * ROW_HEIGHT,
+      bottomPadding: Math.max(0, (rows.length - endIndex) * ROW_HEIGHT),
+      items: rows.slice(startIndex, endIndex),
+    };
+  }, [rows, viewport]);
 
   const stats = useMemo(() => {
     const count = rows.length;
@@ -385,7 +469,7 @@ export default function RegistryGrid() {
     if (!window.confirm(`Удалить выбранные записи (${n}) из реестра?`)) return;
     try {
       const ids = selectedRows.map((r) => r.id).filter(Boolean) as string[];
-      for (const id of ids) await deleteCertificate(id);
+      await deleteCertificates(ids);
       setRowData((prev) => prev.filter((r) => !ids.includes(r.id as string)));
       setSel(null);
       toast(`Удалено записей: ${n}`, "success");
@@ -521,7 +605,12 @@ export default function RegistryGrid() {
       {loading ? (
         <div style={{ padding: 24, color: "var(--muted)" }}>Загрузка данных…</div>
       ) : (
-        <div className="xl-wrap" style={{ height: "calc(100vh - 200px)" }}>
+        <div
+          ref={wrapRef}
+          className="xl-wrap"
+          style={{ height: "calc(100vh - 200px)" }}
+          onScroll={onGridScroll}
+        >
           <table className="xl-table">
             <thead>
               <tr>
@@ -553,7 +642,18 @@ export default function RegistryGrid() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, r) => (
+              {virtualRows.topPadding > 0 && (
+                <tr aria-hidden="true">
+                  <td
+                    className="xl-spacer"
+                    colSpan={COLUMNS.length + 1}
+                    style={{ height: virtualRows.topPadding }}
+                  />
+                </tr>
+              )}
+              {virtualRows.items.map((row, index) => {
+                const r = virtualRows.startIndex + index;
+                return (
                 <tr key={row.id ?? r}>
                   <th
                     className={"xl-rownum" + (sel && isSel(r, 0) ? " xl-rownum-sel" : "")}
@@ -605,7 +705,17 @@ export default function RegistryGrid() {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
+              {virtualRows.bottomPadding > 0 && (
+                <tr aria-hidden="true">
+                  <td
+                    className="xl-spacer"
+                    colSpan={COLUMNS.length + 1}
+                    style={{ height: virtualRows.bottomPadding }}
+                  />
+                </tr>
+              )}
               {rows.length === 0 && (
                 <tr>
                   <td className="xl-empty" colSpan={COLUMNS.length + 1}>

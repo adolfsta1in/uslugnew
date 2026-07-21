@@ -465,6 +465,10 @@ body {
   text-overflow: ellipsis;
   max-width: 360px;
 }
+.xl-table tbody th,
+.xl-table tbody td {
+  height: 30px;
+}
 /* Шапка (закреплена сверху) */
 .xl-table thead th {
   position: sticky;
@@ -588,6 +592,12 @@ body {
   text-align: center;
   color: var(--muted);
   padding: 24px;
+}
+.xl-spacer {
+  padding: 0 !important;
+  border: 0 !important;
+  background: #fff;
+  pointer-events: none;
 }
 /* Строка состояния: итоги по выделению (как в Excel) */
 .xl-statusbar {

@@ -2,6 +2,24 @@ import { getSupabase } from "./supabaseClient";
 import type { Certificate } from "./certificate";
 
 const TABLE = "certificates";
+const PAGE = 1000;
+
+const REGISTRY_SELECT_COLUMNS = [
+  "id",
+  "created_at",
+  "certificate_number",
+  "basis_date_number",
+  "service_name",
+  "address",
+  "manager_name",
+  "service_type",
+  "plan_number",
+  "from_day",
+  "from_month",
+  "from_year",
+  "inspector",
+  "amount",
+].join(",");
 
 // Поля, которые мы записываем в БД (без служебных id/created_at/updated_at —
 // ими управляет Supabase). Держим здесь явный список, чтобы случайно не отправить
@@ -48,8 +66,7 @@ function pickWritable(c: Partial<Certificate>): Partial<Certificate> {
  * Supabase/PostgREST отдаёт максимум 1000 строк за запрос, поэтому выбираем
  * данные постранично (range) и склеиваем, пока не заберём все записи.
  */
-export async function listCertificates(): Promise<Certificate[]> {
-  const PAGE = 1000;
+export async function listCertificates(onPage?: (rows: Certificate[]) => void): Promise<Certificate[]> {
   const all: Certificate[] = [];
   // Вторичный ключ `id` обязателен: при массовом импорте у строк одинаковый
   // created_at, и без уникального тай-брейкера постраничная выборка (range)
@@ -57,13 +74,14 @@ export async function listCertificates(): Promise<Certificate[]> {
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await getSupabase()
       .from(TABLE)
-      .select("*")
+      .select(REGISTRY_SELECT_COLUMNS)
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
-    const rows = (data ?? []) as Certificate[];
+    const rows = (data ?? []) as unknown as Certificate[];
     all.push(...rows);
+    onPage?.(rows);
     if (rows.length < PAGE) break; // последняя страница — дальше данных нет
     if (from > 1_000_000) break; // предохранитель от бесконечного цикла
   }
@@ -104,4 +122,15 @@ export async function updateCertificate(id: string, patch: Partial<Certificate>)
 export async function deleteCertificate(id: string): Promise<void> {
   const { error } = await getSupabase().from(TABLE).delete().eq("id", id);
   if (error) throw error;
+}
+
+/** Удалить несколько записей пачками, чтобы не отправлять отдельный запрос на каждую строку. */
+export async function deleteCertificates(ids: string[]): Promise<void> {
+  const BATCH = 500;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const { error } = await getSupabase().from(TABLE).delete().in("id", batch);
+    if (error) throw error;
+  }
 }
