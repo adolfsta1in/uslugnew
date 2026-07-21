@@ -480,6 +480,17 @@ body {
 .xl-table thead th.xl-head:hover {
   background: #e2e8f0;
 }
+.xl-head-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+}
+.xl-head-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .xl-sort {
   margin-left: 4px;
   color: #2563eb;
@@ -487,6 +498,30 @@ body {
 }
 .xl-sort sup {
   font-size: 8px;
+}
+.xl-filter {
+  display: block;
+  width: 100%;
+  min-width: 52px;
+  height: 22px;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  outline: none;
+  user-select: text;
+}
+.xl-filter:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+.xl-filter::placeholder {
+  color: #94a3b8;
 }
 /* Угол и номера строк (закреплены слева) */
 .xl-corner {

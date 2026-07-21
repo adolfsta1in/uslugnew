@@ -99,6 +99,7 @@ export default function RegistryGrid() {
   const [rowData, setRowData] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
   const [quick, setQuick] = useState("");
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [sortModel, setSortModel] = useState<SortLevel[]>([]);
   const [sel, setSel] = useState<Selection | null>(null);
   const [editing, setEditing] = useState<{ id: string; colId: string; value: string } | null>(
@@ -141,14 +142,48 @@ export default function RegistryGrid() {
     return () => window.removeEventListener("mouseup", up);
   }, []);
 
-  // Фильтрация по строке поиска.
+  const activeFilterCount = useMemo(
+    () => Object.values(columnFilters).filter((v) => v.trim() !== "").length,
+    [columnFilters]
+  );
+
+  const setColumnFilter = (colId: string, value: string) => {
+    setColumnFilters((prev) => {
+      if (value === "") {
+        const next = { ...prev };
+        delete next[colId];
+        return next;
+      }
+      return { ...prev, [colId]: value };
+    });
+  };
+
+  const clearColumnFilters = () => {
+    setColumnFilters({});
+    toast("Фильтры по колонкам сброшены", "info");
+  };
+
+  // Фильтрация по общей строке поиска и по отдельным колонкам.
   const filtered = useMemo(() => {
     const q = quick.trim().toLowerCase();
-    if (!q) return rowData;
-    return rowData.filter((row) =>
-      COLUMNS.some((col) => cellText(row, col).toLowerCase().includes(q))
-    );
-  }, [rowData, quick]);
+    const filters = Object.entries(columnFilters)
+      .map(([colId, value]) => [colId, value.trim().toLowerCase()] as const)
+      .filter(([, value]) => value !== "");
+
+    if (!q && filters.length === 0) return rowData;
+
+    const colMap = new Map(COLUMNS.map((col) => [col.colId, col]));
+    return rowData.filter((row) => {
+      const matchesQuick =
+        !q || COLUMNS.some((col) => cellText(row, col).toLowerCase().includes(q));
+      if (!matchesQuick) return false;
+
+      return filters.every(([colId, value]) => {
+        const col = colMap.get(colId);
+        return col ? cellText(row, col).toLowerCase().includes(value) : true;
+      });
+    });
+  }, [rowData, quick, columnFilters]);
 
   // Сортировка по модели (многоуровневая).
   const rows = useMemo(() => {
@@ -461,6 +496,9 @@ export default function RegistryGrid() {
         <button className="btn" onClick={clearSort} disabled={sortModel.length === 0}>
           ✖ Сбросить сортировку
         </button>
+        <button className="btn" onClick={clearColumnFilters} disabled={activeFilterCount === 0}>
+          Сбросить фильтры{activeFilterCount ? ` (${activeFilterCount})` : ""}
+        </button>
         <button className="btn" disabled={!anchorRow} onClick={() => openInEditor(anchorRow)}>
           📂 Открыть
         </button>
@@ -496,8 +534,20 @@ export default function RegistryGrid() {
                     title={col.header}
                     onClick={(e) => onHeaderClick(c, e)}
                   >
-                    <span className="xl-head-text">{col.header}</span>
-                    {sortIndicator(col.colId)}
+                    <div className="xl-head-label">
+                      <span className="xl-head-text">{col.header}</span>
+                      {sortIndicator(col.colId)}
+                    </div>
+                    <input
+                      className="xl-filter"
+                      value={columnFilters[col.colId] ?? ""}
+                      placeholder="Поиск"
+                      aria-label={`Фильтр: ${col.header}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onChange={(e) => setColumnFilter(col.colId, e.target.value)}
+                    />
                   </th>
                 ))}
               </tr>
@@ -587,7 +637,8 @@ export default function RegistryGrid() {
 
       <p style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
         Протяните мышью по ячейкам, чтобы выделить диапазон; тяните по номерам строк слева — чтобы
-        выделять строки. Ctrl+C — копировать выделение (вставляется в Excel). «Сортировка…» —
+        выделять строки. Ctrl+C — копировать выделение (вставляется в Excel). Поля в заголовках
+        фильтруют каждую колонку отдельно. «Сортировка…» —
         многоуровневая (предзаполняется из выделения). Выделите числовые ячейки (напр. столбец
         «Сумма») — снизу появится их сумма, среднее и количество. Клик по заголовку сортирует столбец,
         Ctrl+клик — добавляет к сортировке. Двойной клик по ячейке — редактирование; по номеру строки
